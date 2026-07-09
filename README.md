@@ -59,14 +59,18 @@ EOF
 | `POOL_SIZE` | nein | `10` | DB-Connection-Pool |
 | `TRUSTED_PROXY_HOPS` | nein | `1` | Anzahl Reverse-Proxies (Traefik = 1; CDN/LB davor → erhöhen) |
 
-### 3. Migrationen (vor erstem Start und nach jedem Upgrade)
+### 3. Migrationen
+
+Laufen **automatisch beim Container-Start** — `Orbitly.Application` hat einen
+`Ecto.Migrator` im Supervisor, der im Release (Umgebungsvariable `RELEASE_NAME`
+gesetzt) ausstehende Migrationen vor dem Endpoint ausführt. Legt die DB-Datei
+beim ersten Start an. Kein separater Schritt nötig.
+
+Manuell (z. B. Vorabprüfung ohne Server-Start) geht weiterhin:
 
 ```sh
 docker compose -f compose.prod.yml run --rm app /app/bin/migrate
 ```
-
-Legt die SQLite-Datei an bzw. bringt das Schema auf Stand. Kein Mix im Image —
-das Release-Skript `bin/migrate` ruft `Orbitly.Release.migrate`.
 
 ### 4. Ersten Admin + Hauptdomain anlegen
 
@@ -115,8 +119,7 @@ falschen `x-forwarded-for`-Eintrag.
 ```sh
 # .env: ORBITLY_VERSION anheben
 docker compose -f compose.prod.yml pull
-docker compose -f compose.prod.yml run --rm app /app/bin/migrate
-docker compose -f compose.prod.yml up -d
+docker compose -f compose.prod.yml up -d   # Migrationen laufen automatisch beim Start
 ```
 
 ### Release schneiden

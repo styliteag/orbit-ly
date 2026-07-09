@@ -3,8 +3,12 @@
 # Kopiervorlage. Passe die markierten Werte an, lege ein .env daneben (siehe
 # README → Deployment) und starte:
 #
-#   docker compose -f compose.prod.yml run --rm app /app/bin/migrate   # 1x / Upgrade
 #   docker compose -f compose.prod.yml up -d
+#
+# Migrationen laufen beim Start automatisch: die App hat einen Ecto.Migrator im
+# Supervisor (Orbitly.Application), der im Release (RELEASE_NAME gesetzt)
+# ausstehende Migrationen beim Boot ausführt. Ein separater migrate-Aufruf ist
+# nicht nötig.
 #
 # Annahmen: ein bestehender Traefik läuft und terminiert TLS; sein Docker-
 # Netzwerk heißt `proxy` (unten anpassen). SQLite = Single-Writer → GENAU EINE
