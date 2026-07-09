@@ -45,6 +45,15 @@ defmodule OrbitlyWeb.Layouts do
         </a>
       </div>
       <div class="flex-none flex items-center gap-2">
+        <.link
+          id="github-repository-link"
+          href="https://github.com/styliteag/orbit-ly"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-ghost btn-sm"
+        >
+          github/styliteag/orbit-ly
+        </.link>
         <%= if @current_user do %>
           <.link navigate={~p"/links"} class="btn btn-ghost btn-sm">My links</.link>
           <span class="text-sm opacity-60 hidden sm:inline px-2">{@current_user.email}</span>
