@@ -1,0 +1,20 @@
+# Stylite Orbit-ly — Dev-Umgebung (ADR-0007: kein lokales Elixir nötig)
+# Start: docker compose up   →   http://localhost:4000
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: sh -c "mix local.hex --force && mix local.rebar --force && mix setup && mix phx.server"
+    ports:
+      - "4000:4000"
+    environment:
+      # Toolchain-Caches in ./data statt im Projekt-Mount
+      MIX_HOME: /toolchain/mix
+      HEX_HOME: /toolchain/hex
+    volumes:
+      - .:/app
+      - ./data/deps:/app/deps
+      - ./data/build:/app/_build
+      - ./data/toolchain:/toolchain

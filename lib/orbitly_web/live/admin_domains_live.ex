@@ -1,0 +1,159 @@
+defmodule OrbitlyWeb.AdminDomainsLive do
+  @moduledoc """
+  Instance-admin domain management (ADR-0003): add concrete hostnames,
+  choose the primary domain, toggle active, delete.
+  """
+
+  use OrbitlyWeb, :live_view
+
+  on_mount {OrbitlyWeb.LiveUserAuth, :live_admin_required}
+
+  alias Orbitly.Shortener
+  alias Orbitly.Shortener.Domain
+
+  @impl true
+  def mount(_params, _session, socket) do
+    {:ok,
+     socket
+     |> assign(:page_title, "Domains")
+     |> load_domains()
+     |> assign_new_form()}
+  end
+
+  @impl true
+  def handle_event("validate", %{"form" => params}, socket) do
+    {:noreply, assign(socket, :form, AshPhoenix.Form.validate(socket.assigns.form, params))}
+  end
+
+  def handle_event("save", %{"form" => params}, socket) do
+    case AshPhoenix.Form.submit(socket.assigns.form, params: params) do
+      {:ok, domain} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Domain #{domain.hostname} added")
+         |> load_domains()
+         |> assign_new_form()}
+
+      {:error, form} ->
+        {:noreply, assign(socket, :form, form)}
+    end
+  end
+
+  def handle_event("make-primary", %{"id" => id}, socket) do
+    with %Domain{} = domain <- find(socket, id),
+         {:ok, _} <- Shortener.make_primary(domain, actor: socket.assigns.current_user) do
+      {:noreply, load_domains(socket)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Could not set primary domain")}
+    end
+  end
+
+  def handle_event("toggle-active", %{"id" => id}, socket) do
+    with %Domain{} = domain <- find(socket, id),
+         {:ok, _} <-
+           Shortener.update_domain(domain, %{active: !domain.active},
+             actor: socket.assigns.current_user
+           ) do
+      {:noreply, load_domains(socket)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Could not update domain")}
+    end
+  end
+
+  def handle_event("delete", %{"id" => id}, socket) do
+    with %Domain{} = domain <- find(socket, id),
+         :ok <- Shortener.destroy_domain(domain, actor: socket.assigns.current_user) do
+      {:noreply, socket |> put_flash(:info, "Domain deleted") |> load_domains()}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Could not delete domain")}
+    end
+  end
+
+  defp find(socket, id), do: Enum.find(socket.assigns.domains, &(&1.id == id))
+
+  defp load_domains(socket) do
+    {:ok, domains} = Shortener.list_domains(actor: socket.assigns.current_user)
+    assign(socket, :domains, Enum.sort_by(domains, & &1.hostname))
+  end
+
+  defp assign_new_form(socket) do
+    form =
+      AshPhoenix.Form.for_create(Domain, :create,
+        actor: socket.assigns.current_user,
+        as: "form"
+      )
+
+    assign(socket, :form, to_form(form))
+  end
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <Layouts.app flash={@flash} current_user={@current_user}>
+      <div class="space-y-8">
+        <.header>
+          Domains
+          <:subtitle>Redirect hosts served by this instance</:subtitle>
+        </.header>
+
+        <.form for={@form} id="domain-form" phx-change="validate" phx-submit="save">
+          <div class="flex flex-col sm:flex-row gap-2 items-start">
+            <div class="flex-1 w-full">
+              <.input field={@form[:hostname]} placeholder="go.example.com" class="input w-full" />
+            </div>
+            <.button phx-disable-with="Saving…" class="btn btn-primary">
+              <.icon name="hero-plus" class="w-4 h-4" /> Add domain
+            </.button>
+          </div>
+        </.form>
+
+        <div class="space-y-2">
+          <div
+            :for={domain <- @domains}
+            id={"domain-#{domain.id}"}
+            class="card bg-base-100 border border-base-200 shadow-sm"
+          >
+            <div class="card-body py-3 px-4 sm:flex-row sm:items-center gap-3">
+              <div class="min-w-0 flex-1 flex items-center gap-2">
+                <span class="font-semibold truncate">{domain.hostname}</span>
+                <span :if={domain.is_primary} class="badge badge-primary badge-sm">primary</span>
+                <span :if={!domain.active} class="badge badge-warning badge-sm">inactive</span>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  :if={!domain.is_primary}
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  phx-click="make-primary"
+                  phx-value-id={domain.id}
+                >
+                  Make primary
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  phx-click="toggle-active"
+                  phx-value-id={domain.id}
+                >
+                  {if domain.active, do: "Deactivate", else: "Activate"}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  title="Delete domain"
+                  phx-click="delete"
+                  phx-value-id={domain.id}
+                  data-confirm="Delete this domain and all its links?"
+                >
+                  <.icon name="hero-trash" class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Layouts.app>
+    """
+  end
+end
