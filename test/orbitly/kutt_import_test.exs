@@ -1,0 +1,115 @@
+defmodule Orbitly.KuttImportTest do
+  use Orbitly.DataCase, async: false
+
+  require Ash.Query
+
+  import Orbitly.Fixtures
+
+  alias Orbitly.KuttImport
+  alias Orbitly.Shortener.{ClickEvent, Link}
+
+  defmodule StubClient do
+    @behaviour Orbitly.KuttImport.Client
+    @impl true
+    def list_links(%{links: links}), do: {:ok, links}
+  end
+
+  defp run(links, opts \\ []) do
+    KuttImport.run([client: StubClient, config: %{links: links}] ++ opts)
+  end
+
+  defp kutt_link(attrs) do
+    Map.merge(
+      %{
+        "address" => "abc123",
+        "target" => "https://example.com/page",
+        "description" => nil,
+        "expire_in" => nil,
+        "visit_count" => 0,
+        "password" => false,
+        "created_at" => "2024-01-02T03:04:05.000Z",
+        "updated_at" => "2024-01-02T03:04:05.000Z"
+      },
+      attrs
+    )
+  end
+
+  defp links_by_slug(slug) do
+    Link |> Ash.Query.filter(slug == ^slug) |> Ash.read!(authorize?: false)
+  end
+
+  setup do
+    admin = admin_fixture()
+    domain = domain_fixture(%{is_primary: true})
+    %{admin: admin, domain: domain}
+  end
+
+  test "imports a link onto the admin and primary domain, preserving created_at", %{
+    admin: admin,
+    domain: domain
+  } do
+    report = run([kutt_link(%{"address" => "abc123", "target" => "https://dest.example"})])
+
+    assert [{"abc123", "abc123"}] = report.imported
+    assert [link] = links_by_slug("abc123")
+    assert link.owner_id == admin.id
+    assert link.domain_id == domain.id
+    assert link.target_url == "https://dest.example"
+    assert DateTime.to_date(link.inserted_at) == ~D[2024-01-02]
+  end
+
+  test "a reserved slug gets a numeric suffix" do
+    report = run([kutt_link(%{"address" => "stats"})])
+
+    assert [{"stats", "stats-1"}] = report.renamed
+    assert [_link] = links_by_slug("stats-1")
+    assert links_by_slug("stats") == []
+  end
+
+  test "a slug already present on the domain is skipped", %{admin: admin, domain: domain} do
+    link_fixture(admin, domain, %{slug: "taken"})
+
+    report = run([kutt_link(%{"address" => "taken"})])
+
+    assert report.skipped_exists == ["taken"]
+    assert report.imported == []
+    assert [_only_one] = links_by_slug("taken")
+  end
+
+  test "an invalid slug is skipped" do
+    report = run([kutt_link(%{"address" => "no/slashes"})])
+
+    assert report.skipped_invalid == ["no/slashes"]
+    assert report.imported == []
+  end
+
+  test "synthesises one click per visit_count spread across the lifetime" do
+    now = ~U[2024-06-01 00:00:00.000000Z]
+
+    report =
+      run(
+        [kutt_link(%{"address" => "hot", "visit_count" => 3})],
+        now: now
+      )
+
+    assert report.clicks == 3
+    assert [link] = links_by_slug("hot")
+
+    events =
+      ClickEvent
+      |> Ash.Query.filter(link_id == ^link.id)
+      |> Ash.read!(authorize?: false)
+
+    assert length(events) == 3
+    assert Enum.all?(events, &(&1.user_agent == "kutt-import"))
+    assert Enum.all?(events, &is_nil(&1.ip))
+  end
+
+  test "password-protected links import without a password and are reported" do
+    report = run([kutt_link(%{"address" => "secret", "password" => true})])
+
+    assert report.protected == ["secret"]
+    assert [link] = links_by_slug("secret")
+    assert is_nil(link.password_hash)
+  end
+end

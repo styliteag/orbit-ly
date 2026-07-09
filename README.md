@@ -84,18 +84,19 @@ docker compose -f compose.prod.yml run --rm \
   app /app/bin/create_admin
 ```
 
-Die Hauptdomain gibt es noch nicht als Task — einmalig per RPC:
+Die Hauptdomain legt der Task `bin/create_domain` an (idempotent, liest
+`DOMAIN_HOSTNAME`; primär per Default, `DOMAIN_PRIMARY=false` für eine reine
+Redirect-Domain). Anders als ein roher `Ash.Seed` läuft er durch die echte
+Create-Action, normalisiert und validiert also den Hostnamen:
 
 ```sh
-docker compose -f compose.prod.yml up -d
-docker compose -f compose.prod.yml exec app /app/bin/orbitly rpc '
-  Ash.Seed.seed!(Orbitly.Shortener.Domain, %{
-    hostname: "go.example.com", is_primary: true, active: true
-  })
-'
+docker compose -f compose.prod.yml run --rm \
+  -e DOMAIN_HOSTNAME=go.example.com \
+  app /app/bin/create_domain
 ```
 
-Danach Login unter `https://$PHX_HOST`; weitere Domains und Benutzer im Admin-UI.
+Danach `docker compose -f compose.prod.yml up -d`, Login unter `https://$PHX_HOST`;
+weitere Domains und Benutzer im Admin-UI.
 
 ### 5. Traefik-Routing
 
@@ -121,6 +122,28 @@ falschen `x-forwarded-for`-Eintrag.
 docker compose -f compose.prod.yml pull
 docker compose -f compose.prod.yml up -d   # Migrationen laufen automatisch beim Start
 ```
+
+### 7. Links aus Kutt importieren (optional)
+
+`bin/import_kutt` holt die Links einer Kutt-Instanz über deren API und legt sie
+beim aktuellen Admin auf der Primärdomain an (oder `KUTT_DOMAIN`). Idempotent —
+mehrfach ausführbar.
+
+```sh
+docker compose -f compose.prod.yml run --rm \
+  -e KUTT_API_URL=http://kutt.intern:3000 \
+  -e KUTT_API_KEY=<kutt-api-key> \
+  app /app/bin/import_kutt
+```
+
+Im Dev: `just import-kutt http://localhost:3000 <KEY> [domain]`.
+
+Grenzen (durch Kutts API bedingt): nur die Links des API-Key-Users; **keine
+Passwort-Hashes** — geschützte Links kommen ohne Passwort rein und werden am
+Ende aufgelistet (neu setzen); Klick-History wird **synthetisiert** (ein Event
+pro gezähltem Visit, gleichmäßig über die Link-Lebensdauer verteilt,
+Platzhalter-User-Agent, keine IP). Reserved-Slugs (`admin`, `stats`, …) bekommen
+ein Suffix, bereits vorhandene Slugs werden übersprungen.
 
 ### Release schneiden
 

@@ -59,6 +59,10 @@ release type="patch":
 publish platforms="all":
     ./build-and-push.sh {{platforms}}
 
+# Links aus einer Kutt-Instanz importieren (API). just import-kutt URL KEY [DOMAIN]
+import-kutt url key domain="":
+    docker compose run --rm app mix orbitly.import_kutt --api-url {{url}} --api-key {{key}} {{ if domain == "" { "" } else { "--domain " + domain } }}
+
 # --- Aufräumen ----------------------------------------------------------------
 
 # Entfernt Container UND die Dev-Caches unter ./data (deps, _build, toolchain).
