@@ -19,6 +19,23 @@ Tests:
 docker compose run --rm app sh -c "mix setup && mix test"
 ```
 
+## Custom-Domain-Redirects (Root & Catch-all)
+
+Neben normalen Kurzlinks (`domain/slug`) kann ein Admin pro Domain zwei
+Spezial-Links anlegen — einfach den passenden Wert ins **Custom-address**-Feld
+des Link-Formulars tippen:
+
+| Eingabe | Ergebnis | Wirkt auf |
+| --- | --- | --- |
+| `/` oder `@` | **Root-Redirect** — `domain/` leitet weiter | nur Redirect-Domains (Hauptdomain-Wurzel bleibt das Dashboard) |
+| `/*` oder `*` | **Catch-all** — fängt jeden sonst nicht passenden Pfad, auch mehrsegmentige | nur Redirect-Domains |
+
+Auflösung pro Anfrage: konkreter Slug schlägt Catch-all; die Wurzel probiert
+erst den Root-Link, dann den Catch-all; trifft nichts → 404. Beide erben
+Ablaufdatum, Passwortschutz und Klick-Statistik wie normale Links. In der
+Link-Liste erscheinen sie als `domain/` bzw. `domain/*`. Höchstens je einer pro
+Domain.
+
 ## Deployment (Docker hinter Traefik)
 
 Das Multi-Stage-`Dockerfile` baut ein Mix Release. Betrieb als **ein** Container
