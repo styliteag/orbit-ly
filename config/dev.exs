@@ -22,7 +22,9 @@ config :orbitly, OrbitlyWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "MQ6Od5hQ6qNTzsOEMCHj8Z9NWw5yI80LnjN4stxwC8GdrBrkO41CJVfVo5v2u1ik",
+  secret_key_base:
+    System.get_env("SECRET_KEY_BASE") ||
+      "dev_only_secret_key_base_not_for_production_000000000000000000000000",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:orbitly, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:orbitly, ~w(--watch)]}
@@ -52,7 +54,10 @@ config :orbitly, OrbitlyWeb.Endpoint,
 # different ports.
 
 # Enable dev routes for dashboard and mailbox
-config :orbitly, dev_routes: true, token_signing_secret: "e3XxoUwudYZ+4PQbtmSESHRhxUng6Uk2"
+config :orbitly,
+  dev_routes: true,
+  token_signing_secret:
+    System.get_env("TOKEN_SIGNING_SECRET") || "dev_only_token_signing_secret_not_for_production"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

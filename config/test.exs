@@ -1,5 +1,7 @@
 import Config
-config :orbitly, token_signing_secret: "wSWbZlsyp/IJGPWda4UE1DKPGxnL6UZs"
+config :orbitly,
+  token_signing_secret:
+    System.get_env("TOKEN_SIGNING_SECRET") || "test_only_token_signing_secret_not_for_production"
 config :bcrypt_elixir, log_rounds: 1
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 
@@ -17,7 +19,9 @@ config :orbitly, Orbitly.Repo,
 # you can enable the server option below.
 config :orbitly, OrbitlyWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "MtTDLpgDbz4MmiTGtuhNgQQy0AXk00e5Ry7LWvDYnFWyqJEZylE2BgWa6ugIMBrL",
+  secret_key_base:
+    System.get_env("SECRET_KEY_BASE") ||
+      "test_only_secret_key_base_not_for_production_00000000000000000000000",
   server: false
 
 # In test we don't send emails
