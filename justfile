@@ -50,9 +50,14 @@ codegen NAME:
 migrate:
     docker compose run --rm app mix ash.migrate
 
-# Bump version, update CHANGELOG.md, tag, and push.
+# Bump version, update CHANGELOG.md, tag, and push (triggers the GHA release build).
 release type="patch":
     ./release.sh {{type}}
+
+# Build the prod image LOCALLY and push straight to the registries (no CI).
+# just publish        → amd64 + arm64   |   just publish amd64   → single arch
+publish platforms="all":
+    ./build-and-push.sh {{platforms}}
 
 # --- Aufräumen ----------------------------------------------------------------
 
