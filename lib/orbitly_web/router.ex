@@ -12,6 +12,7 @@ defmodule OrbitlyWeb.Router do
     plug :put_root_layout, html: {OrbitlyWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug OrbitlyWeb.Plugs.ContentSecurityPolicy
     plug :load_from_session
   end
 

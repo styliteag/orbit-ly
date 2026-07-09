@@ -1,0 +1,83 @@
+# Stylite Orbit-ly — Produktion hinter Traefik.
+#
+# Kopiervorlage. Passe die markierten Werte an, lege ein .env daneben (siehe
+# README → Deployment) und starte:
+#
+#   docker compose -f compose.prod.yml run --rm app /app/bin/migrate   # 1x / Upgrade
+#   docker compose -f compose.prod.yml up -d
+#
+# Annahmen: ein bestehender Traefik läuft und terminiert TLS; sein Docker-
+# Netzwerk heißt `proxy` (unten anpassen). SQLite = Single-Writer → GENAU EINE
+# app-Instanz, kein Scaling/keine Replicas.
+
+services:
+  app:
+    image: ghcr.io/styliteag/orbit-ly:${ORBITLY_VERSION:-latest}
+    restart: unless-stopped
+
+    environment:
+      # --- Pflicht ---
+      # SQLite-Datei auf dem Volume (siehe volumes unten).
+      DATABASE_PATH: /data/orbitly.db
+      # `openssl rand -base64 64 | tr -d '\n'`  (>= 64 Zeichen)
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?in .env setzen}
+      # `openssl rand -base64 48 | tr -d '\n'`
+      TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?in .env setzen}
+      # Hauptdomain (Dashboard-Host), z. B. go.example.com
+      PHX_HOST: ${PHX_HOST:?Dashboard-Hostname setzen}
+
+      # --- Optional (Defaults gezeigt) ---
+      PORT: "4000"
+      POOL_SIZE: "10"
+      # Anzahl vertrauenswürdiger Reverse-Proxies vor der App. Traefik = 1.
+      # Steht noch ein CDN/LB davor: entsprechend erhöhen (sonst Rate-Limit &
+      # Klick-IP am falschen x-forwarded-for-Eintrag).
+      TRUSTED_PROXY_HOPS: "1"
+
+    volumes:
+      # Persistente SQLite-DB (inkl. -wal/-shm). NICHT löschen.
+      - orbitly-data:/data
+
+    networks:
+      - proxy
+
+    # Optionaler Healthcheck (BEAM lebt). Prüft keine HTTP-Route.
+    # healthcheck:
+    #   test: ["CMD", "/app/bin/orbitly", "rpc", "IO.puts(:ok)"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+
+      # --- HTTPS-Router: Dashboard + ALLE Redirect-Domains auf die App ---
+      # Variante 1 (empfohlen): konkrete Hosts auflisten. Per-Host-Zertifikate
+      # via ACME/HTTP-01 funktionieren automatisch. Bei jeder neuen Domain im
+      # Admin: hier ergänzen und `docker compose up -d`.
+      - traefik.http.routers.orbitly.rule=Host(`go.example.com`) || Host(`sho.rt`) || Host(`example.link`)
+      - traefik.http.routers.orbitly.entrypoints=websecure
+      - traefik.http.routers.orbitly.tls=true
+      - traefik.http.routers.orbitly.tls.certresolver=le
+      - traefik.http.services.orbitly.loadbalancer.server.port=4000
+
+      # Variante 2 (Catch-all, alle Hosts → App): ERSETZT die rule oben.
+      # Braucht ein passendes Zertifikat (Wildcard via DNS-01 für *.deine-domain,
+      # oder ein Default-Cert), weil ACME keine Certs für unbekannte Hosts
+      # on-demand ausstellt. Traefik v3-Syntax:
+      # - traefik.http.routers.orbitly.rule=HostRegexp(`^.+$`)
+
+      # --- HTTP → HTTPS Redirect ---
+      - traefik.http.routers.orbitly-http.rule=Host(`go.example.com`) || Host(`sho.rt`) || Host(`example.link`)
+      - traefik.http.routers.orbitly-http.entrypoints=web
+      - traefik.http.routers.orbitly-http.middlewares=orbitly-https
+      - traefik.http.middlewares.orbitly-https.redirectscheme.scheme=https
+
+volumes:
+  orbitly-data:
+
+networks:
+  # Das bestehende Traefik-Netzwerk. `external: true` = wird nicht hier erzeugt.
+  proxy:
+    external: true

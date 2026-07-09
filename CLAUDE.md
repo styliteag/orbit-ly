@@ -76,8 +76,13 @@ docker compose run --rm app mix precommit   # vor jedem Commit
   `:trusted_proxy_hops` (ENV `TRUSTED_PROXY_HOPS`, Default 1) muss zur Anzahl
   der Reverse-Proxies passen, sonst greift Rate-Limiting am falschen Wert.
 - Auth-POSTs (`/auth/*`) sind per `AuthRateLimit`-Plug gedrosselt (10/min/IP).
-  Session-Cookie hat noch kein `secure`-Flag (LOW, `force_ssl` mildert); CSP
-  fehlt noch (Sobelow). Beides offen.
+- CSP: strikte Content-Security-Policy per `ContentSecurityPolicy`-Plug, in Dev
+  aus (`csp_enabled: false`, sonst bricht LiveReload). Inline-Skripte brauchen
+  `nonce={assigns[:csp_nonce]}` — neue Inline-Skripte sonst geblockt.
+- Session-Cookie `secure: true` nur in Prod (`config :orbitly, :session`,
+  compile-time im Endpoint).
+- Prod-Admin anlegen: `bin/create_admin` mit `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+  (idempotent, `Orbitly.Release.create_admin`). Keine offene Registrierung.
 - GeoIP/Land ist GESTRICHEN (ADR-0005-Präzisierung) — nicht wieder einbauen
   ohne neue Entscheidung.
 - Prod-Deploy noch nie durchgespielt (Release-Image bauen, Volume, Proxy).

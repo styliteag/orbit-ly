@@ -83,3 +83,7 @@ config :swoosh, :api_client, false
 # Redirector: unbekannte Hosts an den Router durchreichen (Dev-Komfort).
 # In Produktion bleibt der Default false (404, ADR-0003).
 config :orbitly, serve_ui_on_unknown_hosts: true
+
+# Content-Security-Policy in Dev aus (Phoenix LiveReload injiziert
+# Inline-Skript/iframe). Prod/Test erzwingen sie.
+config :orbitly, csp_enabled: false

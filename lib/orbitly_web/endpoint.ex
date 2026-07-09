@@ -4,11 +4,14 @@ defmodule OrbitlyWeb.Endpoint do
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
+  # `secure: true` in prod (config/prod.exs) so the session cookie is only
+  # sent over HTTPS; false in dev/test so http://localhost works.
   @session_options [
     store: :cookie,
     key: "_orbitly_key",
     signing_salt: "R9wb8C79",
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: Application.compile_env(:orbitly, [:session, :secure], false)
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
