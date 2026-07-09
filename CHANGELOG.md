@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-09
+
 ### Changed
 
 - Release image publishing now builds the multi-arch Docker image once, pushes all configured tags from that build, and uses the GitHub Actions BuildKit cache to speed up subsequent release builds.
