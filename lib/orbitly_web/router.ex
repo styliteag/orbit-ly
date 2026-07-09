@@ -54,8 +54,8 @@ defmodule OrbitlyWeb.Router do
 
     auth_routes AuthController, Orbitly.Accounts.User, path: "/auth"
 
-    # Keine offene Registrierung (ADR-0006): kein register_path.
-    # Konten legt der Instanz-Admin an.
+    # No open registration (ADR-0006): no register_path.
+    # Accounts are created by the instance admin.
     sign_in_route reset_path: "/reset",
                   auth_routes_prefix: "/auth",
                   on_mount: [{OrbitlyWeb.LiveUserAuth, :live_no_user}],

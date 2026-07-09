@@ -1,18 +1,17 @@
-# Stylite Orbit-ly — Produktion hinter Traefik.
+# Stylite Orbit-ly — production behind Traefik.
 #
-# Kopiervorlage. Passe die markierten Werte an, lege ein .env daneben (siehe
-# README → Deployment) und starte:
+# Template. Adjust the marked values, put a .env next to it (see
+# README → Deployment) and start:
 #
 #   docker compose -f compose.prod.yml up -d
 #
-# Migrationen laufen beim Start automatisch: die App hat einen Ecto.Migrator im
-# Supervisor (Orbitly.Application), der im Release (RELEASE_NAME gesetzt)
-# ausstehende Migrationen beim Boot ausführt. Ein separater migrate-Aufruf ist
-# nicht nötig.
+# Migrations run automatically on start: the app has an Ecto.Migrator in its
+# supervisor (Orbitly.Application) that, in a release (RELEASE_NAME set), runs
+# pending migrations at boot. A separate migrate call is not needed.
 #
-# Annahmen: ein bestehender Traefik läuft und terminiert TLS; sein Docker-
-# Netzwerk heißt `proxy` (unten anpassen). SQLite = Single-Writer → GENAU EINE
-# app-Instanz, kein Scaling/keine Replicas.
+# Assumptions: an existing Traefik runs and terminates TLS; its Docker network
+# is called `proxy` (adjust below). SQLite = single-writer → EXACTLY ONE app
+# instance, no scaling/no replicas.
 
 services:
   app:
@@ -20,34 +19,34 @@ services:
     restart: unless-stopped
 
     environment:
-      # --- Pflicht ---
-      # SQLite-Datei auf dem Volume (siehe volumes unten).
+      # --- Required ---
+      # SQLite file on the volume (see volumes below).
       DATABASE_PATH: /data/orbitly.db
-      # `openssl rand -base64 64 | tr -d '\n'`  (>= 64 Zeichen)
-      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?in .env setzen}
+      # `openssl rand -base64 64 | tr -d '\n'`  (>= 64 characters)
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set in .env}
       # `openssl rand -base64 48 | tr -d '\n'`
-      TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?in .env setzen}
-      # Hauptdomain = Dashboard-Host = Primärdomain, z. B. go.example.com.
-      # Beim Boot als Hostname der Primärdomain synchronisiert; ändern zieht
-      # Dashboard + alle Links dort auf die neue Domain um.
-      MAIN_DOMAIN: ${MAIN_DOMAIN:?Hauptdomain setzen}
+      TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?set in .env}
+      # Primary domain = dashboard host, e.g. go.example.com. Synced as the
+      # primary domain's hostname at boot; changing it moves the dashboard +
+      # all links there to the new domain.
+      MAIN_DOMAIN: ${MAIN_DOMAIN:?set the primary domain}
 
-      # --- Optional (Defaults gezeigt) ---
+      # --- Optional (defaults shown) ---
       PORT: "4000"
       POOL_SIZE: "10"
-      # Anzahl vertrauenswürdiger Reverse-Proxies vor der App. Traefik = 1.
-      # Steht noch ein CDN/LB davor: entsprechend erhöhen (sonst Rate-Limit &
-      # Klick-IP am falschen x-forwarded-for-Eintrag).
+      # Number of trusted reverse proxies in front of the app. Traefik = 1.
+      # With a CDN/LB in front as well: increase accordingly (otherwise rate
+      # limit & click IP act on the wrong x-forwarded-for entry).
       TRUSTED_PROXY_HOPS: "1"
 
     volumes:
-      # Persistente SQLite-DB (inkl. -wal/-shm). NICHT löschen.
+      # Persistent SQLite DB (incl. -wal/-shm). Do NOT delete.
       - orbitly-data:/data
 
     networks:
       - proxy
 
-    # Optionaler Healthcheck (BEAM lebt). Prüft keine HTTP-Route.
+    # Optional healthcheck (BEAM alive). Does not check any HTTP route.
     # healthcheck:
     #   test: ["CMD", "/app/bin/orbitly", "rpc", "IO.puts(:ok)"]
     #   interval: 30s
@@ -58,23 +57,23 @@ services:
       - traefik.enable=true
       - traefik.docker.network=proxy
 
-      # --- HTTPS-Router: Dashboard + ALLE Redirect-Domains auf die App ---
-      # Variante 1 (empfohlen): konkrete Hosts auflisten. Per-Host-Zertifikate
-      # via ACME/HTTP-01 funktionieren automatisch. Bei jeder neuen Domain im
-      # Admin: hier ergänzen und `docker compose up -d`.
+      # --- HTTPS router: dashboard + ALL redirect domains to the app ---
+      # Option 1 (recommended): list concrete hosts. Per-host certificates
+      # via ACME/HTTP-01 work automatically. For every new domain in the
+      # admin: add it here and `docker compose up -d`.
       - traefik.http.routers.orbitly.rule=Host(`go.example.com`) || Host(`sho.rt`) || Host(`example.link`)
       - traefik.http.routers.orbitly.entrypoints=websecure
       - traefik.http.routers.orbitly.tls=true
       - traefik.http.routers.orbitly.tls.certresolver=le
       - traefik.http.services.orbitly.loadbalancer.server.port=4000
 
-      # Variante 2 (Catch-all, alle Hosts → App): ERSETZT die rule oben.
-      # Braucht ein passendes Zertifikat (Wildcard via DNS-01 für *.deine-domain,
-      # oder ein Default-Cert), weil ACME keine Certs für unbekannte Hosts
-      # on-demand ausstellt. Traefik v3-Syntax:
+      # Option 2 (catch-all, all hosts → app): REPLACES the rule above.
+      # Needs a matching certificate (wildcard via DNS-01 for *.your-domain,
+      # or a default cert), because ACME does not issue certs for unknown
+      # hosts on-demand. Traefik v3 syntax:
       # - traefik.http.routers.orbitly.rule=HostRegexp(`^.+$`)
 
-      # --- HTTP → HTTPS Redirect ---
+      # --- HTTP → HTTPS redirect ---
       - traefik.http.routers.orbitly-http.rule=Host(`go.example.com`) || Host(`sho.rt`) || Host(`example.link`)
       - traefik.http.routers.orbitly-http.entrypoints=web
       - traefik.http.routers.orbitly-http.middlewares=orbitly-https
@@ -84,6 +83,6 @@ volumes:
   orbitly-data:
 
 networks:
-  # Das bestehende Traefik-Netzwerk. `external: true` = wird nicht hier erzeugt.
+  # The existing Traefik network. `external: true` = not created here.
   proxy:
     external: true

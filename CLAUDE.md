@@ -1,97 +1,98 @@
 # CLAUDE.md — Stylite Orbit-ly
 
-Mandantenfähiger Linkshortener (Phoenix + Ash + AshSqlite). Framework-Konventionen
-(Elixir/Phoenix/LiveView/Ash-Idiome) stehen in **AGENTS.md** — hier nur das
-Projekt-Delta.
+Multi-tenant link shortener (Phoenix + Ash + AshSqlite). Framework conventions
+(Elixir/Phoenix/LiveView/Ash idioms) live in **AGENTS.md** — here only the
+project delta.
 
-## Quellen der Wahrheit
+## Sources of truth
 
-- ADR-Nummern in Code-Kommentaren (`ADR-0001` …) sind historische Referenzen;
-  die ADR-Dokumente selbst liegen nicht in diesem Repo.
-- `docs/GLOSSAR.md`: Ubiquitous Language (Slug, Hauptdomain, Redirect-Hotpath, …).
-- `docs/DOMAENENMODELL.md`: Entitäten, Invarianten, bewusste Nicht-Ziele von v1
-  (keine REST-API, keine BYOD-Domains, keine Teams, kein Klick-Limit).
+- ADR numbers in code comments (`ADR-0001` …) are historical references; the ADR
+  documents themselves are not in this repo.
+- `docs/GLOSSARY.md`: ubiquitous language (slug, primary domain, redirect hot
+  path, …).
+- `docs/DOMAIN_MODEL.md`: entities, invariants, deliberate non-goals of v1 (no
+  REST API, no BYOD domains, no teams, no click limit).
 
-## Goldene Regel: kein lokales Elixir (ADR-0007)
+## Golden rule: no local Elixir (ADR-0007)
 
-Mix läuft NIE auf dem Host. Alles über Docker:
+Mix NEVER runs on the host. Everything via Docker:
 
 ```sh
-just dev          # Server, http://localhost:4000
-just test [ARGS]  # mix test im Container
-just codegen NAME # mix ash.codegen nach JEDER Resource-Änderung
+just dev          # server, http://localhost:4000
+just test [ARGS]  # mix test in the container
+just codegen NAME # mix ash.codegen after EVERY resource change
 just fmt | iex | sh | migrate | setup
-docker compose run --rm app mix precommit   # vor jedem Commit
+docker compose run --rm app mix precommit   # before every commit
 ```
 
-- Dev-Image = `Dockerfile.dev` (elixir:1.20 + cmake für lazy_html + inotify-tools).
-- `./data/` = Caches (deps/_build/toolchain), gitignored; `just clean` löscht sie.
-- Migrationen/Snapshots landen korrekt in `priv/` auf dem Host, auch wenn das
-  Codegen-Log `_build/...`-Pfade anzeigt.
-- Nach `just codegen`/`just migrate` bei laufendem Dev-Server:
-  `docker compose restart app` — der Server prüft Codegen-Status gegen seine
-  veraltete `_build`-Kopie von `priv` und antwortet sonst mit 500.
-- Dev-Login (Seeds, nur dev): `admin@localhost` / `orbitly-dev-password`.
+- Dev image = `Dockerfile.dev` (elixir:1.20 + cmake for lazy_html + inotify-tools).
+- `./data/` = caches (deps/_build/toolchain), gitignored; `just clean` deletes them.
+- Migrations/snapshots land correctly in `priv/` on the host, even when the
+  codegen log shows `_build/...` paths.
+- After `just codegen`/`just migrate` with the dev server running:
+  `docker compose restart app` — the server checks codegen status against its
+  stale `_build` copy of `priv` and otherwise responds with 500.
+- Dev login (seeds, dev only): `admin@localhost` / `orbitly-dev-password`.
 
-## Architektur-Eckpfeiler
+## Architecture cornerstones
 
-- **Redirect-Hotpath läuft NIE durch Ash** (ADR-0001): `OrbitlyWeb.Redirector`
-  (Plug im Endpoint vor dem Router) + `RedirectCache` (ETS, Read-through im
-  Caller-Prozess, 60s-TTL). Invalidierung: `CacheInvalidator`-Notifier flusht
-  bei jeder Domain/Link-Mutation komplett.
-- **Klick-Events werden NIE einzeln geschrieben**: nur über `ClickBuffer`
-  (Batch-`insert_all`), sonst blockiert SQLites Single-Writer den Hotpath.
-- **Actor immer durchreichen**: Ownership/Admin läuft über Policies
-  (`relates_to_actor_via(:owner)`, `admin`-Flag). `authorize?: false` ist nur im
-  Hotpath, in Seeds und in Fixtures legitim.
-- Slug-Regeln zentral in `Orbitly.Shortener.Slug`; Reserved-Liste in
-  `config/config.exs` — bei jeder neuen UI-Route ergänzen (ADR-0004).
-- **Primärdomain ist env-gesteuert (Sentinel):** genau eine `is_primary`-Row,
-  ihr Hostname folgt `MAIN_DOMAIN` (`:orbitly, :main_domain`). `MAIN_DOMAIN`
-  ist die EINE Quelle für den Dashboard-Host — auch der Endpoint-`url`-Host
-  (kein `PHX_HOST` mehr). `Orbitly.Shortener.PrimaryDomain` (Supervisor-Child
-  vor dem Endpoint) legt sie beim Boot an oder benennt sie in-place um; Links
-  hängen an der Row-ID und ziehen mit. In Tests aus (`ensure_primary_domain:
-  false`) — dort machen Fixtures die Domains. Primär-Row ist gegen Löschen/
-  Deaktivieren geschützt (`Changes.ProtectPrimary`); `is_primary` ist NICHT im
-  `:create`-accept — kein Admin-`make_primary` mehr.
+- **Redirect hot path NEVER goes through Ash** (ADR-0001): `OrbitlyWeb.Redirector`
+  (plug in the endpoint before the router) + `RedirectCache` (ETS, read-through
+  in the caller process, 60s TTL). Invalidation: the `CacheInvalidator` notifier
+  fully flushes on every domain/link mutation.
+- **Click events are NEVER written one by one**: only via `ClickBuffer`
+  (batch `insert_all`), otherwise SQLite's single writer blocks the hot path.
+- **Always pass the actor through**: ownership/admin runs through policies
+  (`relates_to_actor_via(:owner)`, `admin` flag). `authorize?: false` is only
+  legitimate in the hot path, in seeds and in fixtures.
+- Slug rules centralized in `Orbitly.Shortener.Slug`; reserved list in
+  `config/config.exs` — extend it for every new UI route (ADR-0004).
+- **The primary domain is env-driven (sentinel):** exactly one `is_primary` row,
+  its hostname follows `MAIN_DOMAIN` (`:orbitly, :main_domain`). `MAIN_DOMAIN`
+  is the ONE source for the dashboard host — also the endpoint `url` host (no
+  more `PHX_HOST`). `Orbitly.Shortener.PrimaryDomain` (supervisor child before
+  the endpoint) creates it at boot or renames it in place; links are anchored to
+  the row id and move with it. Off in tests (`ensure_primary_domain: false`) —
+  there fixtures own the domains. The primary row is protected against deletion/
+  deactivation (`Changes.ProtectPrimary`); `is_primary` is NOT in the `:create`
+  accept — no more admin `make_primary`.
 
-## AshSqlite-Fallstricke
+## AshSqlite pitfalls
 
-- **Keine count-Aggregate** (`AggregatesNotSupported`) — stattdessen
-  Ecto-Gruppenquery, siehe `Shortener.click_counts/1`.
-- Transientes „database is locked" bei parallelem Setup schon gesehen; falls es
-  im Betrieb auftaucht: `busy_timeout` in der Repo-Config setzen.
+- **No count aggregates** (`AggregatesNotSupported`) — use an Ecto group query
+  instead, see `Shortener.click_counts/1`.
+- Transient "database is locked" during parallel setup seen already; if it shows
+  up in production: set `busy_timeout` in the repo config.
 
 ## Tests
 
 - Fixtures: `Orbitly.Fixtures`. `user_fixture`/`domain_fixture`/`link_fixture` =
-  `Ash.Seed` (umgeht Policies, beliebiger Zustand). Für eingeloggte
-  Conn/LiveView-Tests IMMER `registered_user_fixture` + `log_in/2` (echtes
-  Token-Metadata, `store_in_session` braucht es).
-- DB- und GenServer-Tests `async: false` (shared Sandbox; SQLite).
-- Tests, die Redirects auslösen, hinterlassen Events im `ClickBuffer` — das
-  Setup-Muster mit `on_exit(fn -> ClickBuffer.flush_now() end)` beibehalten,
-  sonst FK-Fehler-Lärm nach Rollback.
-- `assert_error_sent` funktioniert nicht für Router-404s (Phoenix 1.8 rendert
-  ohne Re-Raise) — direkt `conn.status == 404` prüfen.
+  `Ash.Seed` (bypasses policies, arbitrary state). For logged-in conn/LiveView
+  tests ALWAYS use `registered_user_fixture` + `log_in/2` (real token metadata,
+  `store_in_session` needs it).
+- DB and GenServer tests `async: false` (shared sandbox; SQLite).
+- Tests that trigger redirects leave events in the `ClickBuffer` — keep the setup
+  pattern with `on_exit(fn -> ClickBuffer.flush_now() end)`, otherwise FK-error
+  noise after rollback.
+- `assert_error_sent` does not work for router 404s (Phoenix 1.8 renders without
+  re-raising) — check `conn.status == 404` directly.
 
-## Bekannte offene Punkte (nicht vergessen)
+## Known open points (don't forget)
 
-- Registrierung ist hart deaktiviert (`RegistrationDisabled`-Validation) —
-  beim Anfassen der Auth-Strategie NICHT versehentlich entfernen.
-- Client-IP IMMER über `OrbitlyWeb.ClientIP.get/1` ermitteln, nie den ersten
-  `x-forwarded-for`-Eintrag nehmen (spoofbar). Prod liest die IP nur aus XFF;
-  `:trusted_proxy_hops` (ENV `TRUSTED_PROXY_HOPS`, Default 1) muss zur Anzahl
-  der Reverse-Proxies passen, sonst greift Rate-Limiting am falschen Wert.
-- Auth-POSTs (`/auth/*`) sind per `AuthRateLimit`-Plug gedrosselt (10/min/IP).
-- CSP: strikte Content-Security-Policy per `ContentSecurityPolicy`-Plug, in Dev
-  aus (`csp_enabled: false`, sonst bricht LiveReload). Inline-Skripte brauchen
-  `nonce={assigns[:csp_nonce]}` — neue Inline-Skripte sonst geblockt.
-- Session-Cookie `secure: true` nur in Prod (`config :orbitly, :session`,
-  compile-time im Endpoint).
-- Prod-Admin anlegen: `bin/create_admin` mit `ADMIN_EMAIL`/`ADMIN_PASSWORD`
-  (idempotent, `Orbitly.Release.create_admin`). Keine offene Registrierung.
-- GeoIP/Land ist GESTRICHEN (ADR-0005-Präzisierung) — nicht wieder einbauen
-  ohne neue Entscheidung.
-- Prod-Deploy noch nie durchgespielt (Release-Image bauen, Volume, Proxy).
+- Registration is hard-disabled (`RegistrationDisabled` validation) — do NOT
+  accidentally remove it when touching the auth strategy.
+- ALWAYS determine the client IP via `OrbitlyWeb.ClientIP.get/1`, never take the
+  first `x-forwarded-for` entry (spoofable). Prod reads the IP only from XFF;
+  `:trusted_proxy_hops` (env `TRUSTED_PROXY_HOPS`, default 1) must match the
+  number of reverse proxies, otherwise rate limiting acts on the wrong value.
+- Auth POSTs (`/auth/*`) are throttled by the `AuthRateLimit` plug (10/min/IP).
+- CSP: strict Content-Security-Policy via the `ContentSecurityPolicy` plug, off
+  in dev (`csp_enabled: false`, otherwise LiveReload breaks). Inline scripts need
+  `nonce={assigns[:csp_nonce]}` — new inline scripts are blocked otherwise.
+- Session cookie `secure: true` only in prod (`config :orbitly, :session`,
+  compile-time in the endpoint).
+- Create the prod admin: `bin/create_admin` with `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+  (idempotent, `Orbitly.Release.create_admin`). No open registration.
+- GeoIP/country is DROPPED (ADR-0005 refinement) — do not add it back without a
+  new decision.
+- Prod deploy never rehearsed (build the release image, volume, proxy).

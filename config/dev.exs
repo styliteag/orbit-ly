@@ -80,10 +80,10 @@ config :phoenix_live_view,
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
 
-# Redirector: unbekannte Hosts an den Router durchreichen (Dev-Komfort).
-# In Produktion bleibt der Default false (404, ADR-0003).
+# Redirector: pass unknown hosts through to the router (dev convenience).
+# In production the default stays false (404, ADR-0003).
 config :orbitly, serve_ui_on_unknown_hosts: true
 
-# Content-Security-Policy in Dev aus (Phoenix LiveReload injiziert
-# Inline-Skript/iframe). Prod/Test erzwingen sie.
+# Content-Security-Policy off in dev (Phoenix LiveReload injects an
+# inline script/iframe). Prod/test enforce it.
 config :orbitly, csp_enabled: false

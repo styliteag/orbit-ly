@@ -4,9 +4,9 @@ set shell := ["bash", "-cu"]
 default:
     @just --list
 
-# --- Dev-Stack (alles im Container, ADR-0007) -------------------------------
+# --- Dev stack (everything in the container, ADR-0007) ----------------------
 
-# Dev-Server mit Live-Reload → http://localhost:4000
+# Dev server with live reload → http://localhost:4000
 dev:
     docker compose up --build
 
@@ -22,28 +22,28 @@ logs:
 build:
     docker compose build
 
-# Shell im App-Container
+# Shell in the app container
 sh:
     docker compose run --rm app bash
 
-# IEx mit laufender App
+# IEx with the app running
 iex:
     docker compose run --rm app iex -S mix
 
-# --- Mix im Container --------------------------------------------------------
+# --- Mix in the container ----------------------------------------------------
 
-# Tests; Argumente werden durchgereicht: just test test/orbitly/shortener
+# Tests; arguments are passed through: just test test/orbitly/shortener
 test *ARGS:
     docker compose run --rm app mix test {{ARGS}}
 
 fmt:
     docker compose run --rm app mix format
 
-# Deps holen + DB aufsetzen + Seeds (idempotent)
+# Fetch deps + set up DB + seeds (idempotent)
 setup:
     docker compose run --rm app sh -c "mix local.hex --force && mix local.rebar --force && mix setup"
 
-# Migration aus Resource-Änderungen generieren: just codegen add_feature_x
+# Generate a migration from resource changes: just codegen add_feature_x
 codegen NAME:
     docker compose run --rm app mix ash.codegen {{NAME}}
 
@@ -59,13 +59,13 @@ release type="patch":
 publish platforms="all":
     ./build-and-push.sh {{platforms}}
 
-# Links aus einer Kutt-Instanz importieren (API). just import-kutt URL KEY [DOMAIN]
+# Import links from a Kutt instance (API). just import-kutt URL KEY [DOMAIN]
 import-kutt url key domain="":
     docker compose run --rm app mix orbitly.import_kutt --api-url {{url}} --api-key {{key}} {{ if domain == "" { "" } else { "--domain " + domain } }}
 
-# --- Aufräumen ----------------------------------------------------------------
+# --- Cleanup ------------------------------------------------------------------
 
-# Entfernt Container UND die Dev-Caches unter ./data (deps, _build, toolchain).
-# Nächster Start kompiliert alles neu. Die SQLite-Dev-DB bleibt unberührt.
+# Removes containers AND the dev caches under ./data (deps, _build, toolchain).
+# Next start recompiles everything. The SQLite dev DB stays untouched.
 clean: down
     rm -rf data/deps data/build data/toolchain

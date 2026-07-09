@@ -1,17 +1,17 @@
 # Stylite Orbit-ly
 
-Mandantenfähiger Linkshortener (ähnlich [kutt](https://github.com/thedevs-network/kutt)),
-gebaut mit Phoenix + [Ash Framework](https://ash-hq.org) auf SQLite.
-Elixir-App: `orbitly`, Modul-Namespace: `Orbitly`.
+Multi-tenant link shortener (similar to [kutt](https://github.com/thedevs-network/kutt)),
+built with Phoenix + [Ash Framework](https://ash-hq.org) on SQLite.
+Elixir app: `orbitly`, module namespace: `Orbitly`.
 
-## Entwicklung (nur Docker, kein lokales Elixir)
+## Development (Docker only, no local Elixir)
 
 ```sh
 docker compose up
 ```
 
-Danach: <http://localhost:4000>. Code-Reload funktioniert über den Bind-Mount;
-Deps, Build-Artefakte und Toolchain liegen in Docker-Volumes.
+Then: <http://localhost:4000>. Code reload works via the bind mount; deps, build
+artifacts and toolchain live in Docker volumes.
 
 Tests:
 
@@ -19,126 +19,124 @@ Tests:
 docker compose run --rm app sh -c "mix setup && mix test"
 ```
 
-## Custom-Domain-Redirects (Root & Catch-all)
+## Custom-domain redirects (root & catch-all)
 
-Neben normalen Kurzlinks (`domain/slug`) kann ein Admin pro Domain zwei
-Spezial-Links anlegen — einfach den passenden Wert ins **Custom-address**-Feld
-des Link-Formulars tippen:
+Besides normal short links (`domain/slug`), an admin can add two special links
+per domain — just type the matching value into the **Custom address** field of
+the link form:
 
-| Eingabe | Ergebnis | Wirkt auf |
+| Input | Result | Applies to |
 | --- | --- | --- |
-| `/` oder `@` | **Root-Redirect** — `domain/` leitet weiter | nur Redirect-Domains (Hauptdomain-Wurzel bleibt das Dashboard) |
-| `/*` oder `*` | **Catch-all** — fängt jeden sonst nicht passenden Pfad, auch mehrsegmentige | nur Redirect-Domains |
+| `/` or `@` | **Root redirect** — `domain/` redirects | redirect domains only (the primary-domain root stays the dashboard) |
+| `/*` or `*` | **Catch-all** — catches every otherwise-unmatched path, including multi-segment ones | redirect domains only |
 
-Auflösung pro Anfrage: konkreter Slug schlägt Catch-all; die Wurzel probiert
-erst den Root-Link, dann den Catch-all; trifft nichts → 404. Beide erben
-Ablaufdatum, Passwortschutz und Klick-Statistik wie normale Links. In der
-Link-Liste erscheinen sie als `domain/` bzw. `domain/*`. Höchstens je einer pro
-Domain.
+Resolution per request: a concrete slug beats the catch-all; the root tries the
+root link first, then the catch-all; nothing matches → 404. Both inherit expiry
+date, password protection and click statistics like normal links. In the link
+list they appear as `domain/` and `domain/*`. At most one of each per domain.
 
-## Deployment (Docker hinter Traefik)
+## Deployment (Docker behind Traefik)
 
-Das Multi-Stage-`Dockerfile` baut ein Mix Release. Betrieb als **ein** Container
-hinter einem externen Traefik (TLS-Terminierung). Vorlage:
-[`compose.prod.yml`](compose.prod.yml). Konfiguration ausschließlich über
-Umgebungsvariablen (`config/runtime.exs`).
+The multi-stage `Dockerfile` builds a Mix release. Run as **one** container
+behind an external Traefik (TLS termination). Template:
+[`compose.prod.yml`](compose.prod.yml). Configuration exclusively via environment
+variables (`config/runtime.exs`).
 
-> **SQLite = Single-Writer.** Genau **eine** app-Instanz betreiben — keine
-> Replicas, kein horizontales Scaling. Die DB-Datei (inkl. `-wal`/`-shm`) muss
-> auf einem persistenten Volume liegen.
+> **SQLite = single-writer.** Run exactly **one** app instance — no replicas, no
+> horizontal scaling. The DB file (incl. `-wal`/`-shm`) must live on a persistent
+> volume.
 
-### 1. Image beziehen
+### 1. Get the image
 
-CI baut bei jedem Tag ein **amd64**-Image nach `ghcr.io/styliteag/orbit-ly:<version>`
-(+ `:latest`). Für arm64 oder einen lokalen Build: `just publish all` (siehe
+CI builds an **amd64** image on every tag to `ghcr.io/styliteag/orbit-ly:<version>`
+(+ `:latest`). For arm64 or a local build: `just publish all` (see
 `build-and-push.sh`).
 
 ### 2. Secrets & `.env`
 
-`compose.prod.yml` liest die Werte aus einem `.env` daneben. Vorlage kopieren
-und ausfüllen (die `.env` selbst ist gitignored):
+`compose.prod.yml` reads the values from a `.env` next to it. Copy the template
+and fill it in (the `.env` itself is gitignored):
 
 ```sh
 cp .env.example .env
-# MAIN_DOMAIN setzen, Secrets erzeugen:
+# set MAIN_DOMAIN, generate the secrets:
 echo "SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')" >> .env
 echo "TOKEN_SIGNING_SECRET=$(openssl rand -base64 48 | tr -d '\n')" >> .env
 ```
 
-| Variable | Pflicht | Default | Bedeutung |
+| Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `DATABASE_PATH` | ja | — | SQLite-Datei, im Compose auf `/data/orbitly.db` gesetzt |
-| `SECRET_KEY_BASE` | ja | — | Cookie-/Session-Signatur, ≥ 64 Zeichen |
-| `TOKEN_SIGNING_SECRET` | ja | — | Signatur der Auth-Tokens |
-| `MAIN_DOMAIN` | ja | — | Hauptdomain = Dashboard-Host = Primärdomain. Beim Boot als Hostname der Primärdomain gesetzt |
-| `PORT` | nein | `4000` | HTTP-Port im Container (Traefik zeigt hierhin) |
-| `POOL_SIZE` | nein | `10` | DB-Connection-Pool |
-| `TRUSTED_PROXY_HOPS` | nein | `1` | Anzahl Reverse-Proxies (Traefik = 1; CDN/LB davor → erhöhen) |
+| `DATABASE_PATH` | yes | — | SQLite file, set to `/data/orbitly.db` in the compose file |
+| `SECRET_KEY_BASE` | yes | — | cookie/session signature, ≥ 64 characters |
+| `TOKEN_SIGNING_SECRET` | yes | — | signature of the auth tokens |
+| `MAIN_DOMAIN` | yes | — | primary domain = dashboard host. Set as the primary domain's hostname at boot |
+| `PORT` | no | `4000` | HTTP port inside the container (Traefik points here) |
+| `POOL_SIZE` | no | `10` | DB connection pool |
+| `TRUSTED_PROXY_HOPS` | no | `1` | number of reverse proxies (Traefik = 1; a CDN/LB in front → increase) |
 
-### 3. Migrationen
+### 3. Migrations
 
-Laufen **automatisch beim Container-Start** — `Orbitly.Application` hat einen
-`Ecto.Migrator` im Supervisor, der im Release (Umgebungsvariable `RELEASE_NAME`
-gesetzt) ausstehende Migrationen vor dem Endpoint ausführt. Legt die DB-Datei
-beim ersten Start an. Kein separater Schritt nötig.
+Run **automatically on container start** — `Orbitly.Application` has an
+`Ecto.Migrator` in the supervisor that, in a release (environment variable
+`RELEASE_NAME` set), runs pending migrations before the endpoint. Creates the DB
+file on first start. No separate step needed.
 
-Manuell (z. B. Vorabprüfung ohne Server-Start) geht weiterhin:
+Manually (e.g. a dry-run check without starting the server) still works:
 
 ```sh
 docker compose -f compose.prod.yml run --rm app /app/bin/migrate
 ```
 
-### 4. Ersten Admin anlegen
+### 4. Create the first admin
 
-Es gibt **keine** offene Registrierung. Den Instanz-Admin legt der Release-Task
-`bin/create_admin` an (idempotent, liest `ADMIN_EMAIL`/`ADMIN_PASSWORD`):
+There is **no** open registration. The release task `bin/create_admin` creates
+the instance admin (idempotent, reads `ADMIN_EMAIL`/`ADMIN_PASSWORD`):
 
 ```sh
 docker compose -f compose.prod.yml run --rm \
   -e ADMIN_EMAIL=admin@example.com \
-  -e ADMIN_PASSWORD='BITTE-AENDERN' \
+  -e ADMIN_PASSWORD='PLEASE-CHANGE' \
   app /app/bin/create_admin
 ```
 
-Die **Hauptdomain** braucht keinen Task: sie kommt aus `MAIN_DOMAIN` und wird
-beim Container-Start als Primärdomain in die DB synchronisiert (angelegt oder
-umbenannt). `MAIN_DOMAIN` später ändern zieht Dashboard **und** alle dort
-liegenden Links auf die neue Domain um — nur neu ausrollen, kein weiterer
-Schritt. Weitere Redirect-Domains legst du im Admin-UI an.
+The **primary domain** needs no task: it comes from `MAIN_DOMAIN` and is synced
+into the DB as the primary domain on container start (created or renamed).
+Changing `MAIN_DOMAIN` later moves the dashboard **and** all links living on it
+to the new domain — just redeploy, no further step. Add further redirect domains
+in the admin UI.
 
-Danach `docker compose -f compose.prod.yml up -d`, Login unter `https://$MAIN_DOMAIN`;
-weitere Domains und Benutzer im Admin-UI.
+Then `docker compose -f compose.prod.yml up -d`, log in at `https://$MAIN_DOMAIN`;
+add more domains and users in the admin UI.
 
-### 5. Traefik-Routing
+### 5. Traefik routing
 
-Die App bedient **mehrere** Hostnamen: das Dashboard auf `MAIN_DOMAIN` und jede
-Redirect-Domain. Unbekannte Hosts → 404 (ADR-0003). Zwei Modelle (Labels in
+The app serves **multiple** hostnames: the dashboard on `MAIN_DOMAIN` and every
+redirect domain. Unknown hosts → 404 (ADR-0003). Two models (labels in
 `compose.prod.yml`):
 
-- **Konkrete Hosts** (empfohlen): `Host(...)`-Liste, per-Host-ACME-Zertifikate
-  automatisch. Bei neuer Domain: Label ergänzen + `docker compose up -d`.
-- **Catch-all** (`HostRegexp(`^.+$`)`): fängt alle Hosts, braucht aber ein
-  passendes Zertifikat (Wildcard via DNS-01 oder Default-Cert), weil ACME für
-  unbekannte Hosts nichts on-demand ausstellt.
+- **Concrete hosts** (recommended): `Host(...)` list, per-host ACME certificates
+  automatically. For a new domain: add a label + `docker compose up -d`.
+- **Catch-all** (`HostRegexp(`^.+$`)`): catches all hosts, but needs a matching
+  certificate (wildcard via DNS-01 or a default cert), because ACME issues
+  nothing on-demand for unknown hosts.
 
-Traefik terminiert TLS und leitet auf Port `4000` (http) weiter; ein
-HTTP→HTTPS-Redirect ist als Middleware vorkonfiguriert. `TRUSTED_PROXY_HOPS`
-muss zur Proxy-Kette passen, sonst greifen Klick-IP und Auth-Rate-Limit am
-falschen `x-forwarded-for`-Eintrag.
+Traefik terminates TLS and forwards to port `4000` (http); an HTTP→HTTPS redirect
+is preconfigured as middleware. `TRUSTED_PROXY_HOPS` must match the proxy chain,
+otherwise click IP and auth rate limit act on the wrong `x-forwarded-for` entry.
 
 ### 6. Upgrade
 
 ```sh
-# .env: ORBITLY_VERSION anheben
+# .env: bump ORBITLY_VERSION
 docker compose -f compose.prod.yml pull
-docker compose -f compose.prod.yml up -d   # Migrationen laufen automatisch beim Start
+docker compose -f compose.prod.yml up -d   # migrations run automatically on start
 ```
 
-### 7. Links aus Kutt importieren (optional)
+### 7. Import links from Kutt (optional)
 
-`bin/import_kutt` holt die Links einer Kutt-Instanz über deren API und legt sie
-beim aktuellen Admin auf der Primärdomain an (oder `KUTT_DOMAIN`). Idempotent —
-mehrfach ausführbar.
+`bin/import_kutt` fetches the links of a Kutt instance via its API and creates
+them for the current admin on the primary domain (or `KUTT_DOMAIN`). Idempotent —
+can be run multiple times.
 
 ```sh
 docker compose -f compose.prod.yml run --rm \
@@ -147,36 +145,35 @@ docker compose -f compose.prod.yml run --rm \
   app /app/bin/import_kutt
 ```
 
-Im Dev: `just import-kutt http://localhost:3000 <KEY> [domain]`.
+In dev: `just import-kutt http://localhost:3000 <KEY> [domain]`.
 
-Grenzen (durch Kutts API bedingt): nur die Links des API-Key-Users; **keine
-Passwort-Hashes** — geschützte Links kommen ohne Passwort rein und werden am
-Ende aufgelistet (neu setzen); Klick-History wird **synthetisiert** (ein Event
-pro gezähltem Visit, gleichmäßig über die Link-Lebensdauer verteilt,
-Platzhalter-User-Agent, keine IP). Reserved-Slugs (`admin`, `stats`, …) bekommen
-ein Suffix, bereits vorhandene Slugs werden übersprungen.
+Limits (imposed by Kutt's API): only the API-key user's links; **no password
+hashes** — protected links come in without a password and are listed at the end
+(set them anew); click history is **synthesized** (one event per counted visit,
+spread evenly over the link's lifetime, placeholder user agent, no IP). Reserved
+slugs (`admin`, `stats`, …) get a suffix, already-existing slugs are skipped.
 
-### Release schneiden
+### Cutting a release
 
-`VERSION` ist die Versionsquelle für Mix und Images. `just release
-[major|minor|patch]` (→ `release.sh`) erhöht die Version, ergänzt einen
-datierten Abschnitt in `CHANGELOG.md`, committet, taggt und pusht. Der Tag
-startet `.github/workflows/release.yml` (baut + pusht das Image, erstellt das
-GitHub-Release).
+`VERSION` is the version source for Mix and images. `just release
+[major|minor|patch]` (→ `release.sh`) bumps the version, adds a dated section to
+`CHANGELOG.md`, commits, tags and pushes. The tag triggers
+`.github/workflows/release.yml` (builds + pushes the image, creates the GitHub
+release).
 
-## Dokumentation
+## Documentation
 
-- [Domänenmodell](docs/DOMAENENMODELL.md) — Entitäten, Invarianten, Abläufe
-- [Glossar](docs/GLOSSAR.md) — Ubiquitous Language
+- [Domain model](docs/DOMAIN_MODEL.md) — entities, invariants, flows
+- [Glossary](docs/GLOSSARY.md) — ubiquitous language
 
-Kernentscheidungen: Mandant = Einzelbenutzer, geteilte Domains (Wildcard nur am
-Proxy), Redirect-Hotpath als eigener Plug mit ETS-Cache an Ash vorbei, keine
-offene Registrierung, Klick-Rohdaten 12 Monate.
+Core decisions: tenant = single user, shared domains (wildcard only at the
+proxy), redirect hot path as its own plug with an ETS cache bypassing Ash, no
+open registration, raw click data kept for 12 months.
 
-## Lizenz
+## License
 
-Source-available unter der [Business Source License 1.1](LICENSE). Selbst
-betreiben und modifizieren erlaubt; Hosting als Dienst für Dritte oder
-Weiterverkauf braucht eine kommerzielle Lizenz. Jede Version wird vier Jahre
-nach Veröffentlichung automatisch GPL v3.0. Klartext-Zusammenfassung:
-[LICENSING.md](LICENSING.md). Kommerzielle Lizenz: office@stylite.de.
+Source-available under the [Business Source License 1.1](LICENSE). Self-hosting
+and modification allowed; hosting as a service for third parties or reselling
+needs a commercial license. Each version turns into GPL v3.0 automatically four
+years after release. Plain-text summary: [LICENSING.md](LICENSING.md). Commercial
+license: office@stylite.de.

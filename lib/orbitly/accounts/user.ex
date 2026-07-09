@@ -164,9 +164,9 @@ defmodule Orbitly.Accounts.User do
     end
 
     create :register_with_password do
-      # ADR-0006: keine offene Registrierung. Die Action muss existieren
-      # (die Passwort-Strategie verlangt sie), schlägt aber immer fehl —
-      # Konten legt der Admin über :admin_create an.
+      # ADR-0006: no open registration. The action must exist
+      # (the password strategy requires it) but always fails —
+      # accounts are created by the admin via :admin_create.
       description "Register a new user with a email and password."
 
       validate Orbitly.Accounts.Validations.RegistrationDisabled
@@ -293,8 +293,8 @@ defmodule Orbitly.Accounts.User do
 
     attribute :confirmed_at, :utc_datetime_usec
 
-    # Instanz-Admin (ADR-0006): verwaltet Domains und Benutzer, Vollzugriff
-    # auf alle Links. Nicht über Auth-Actions setzbar, nur intern.
+    # Instance admin (ADR-0006): manages domains and users, full access
+    # to all links. Not settable via auth actions, internal only.
     attribute :admin, :boolean do
       allow_nil? false
       default false

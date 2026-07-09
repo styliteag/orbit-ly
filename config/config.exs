@@ -57,20 +57,20 @@ config :orbitly,
   generators: [timestamp_type: :utc_datetime],
   ash_domains: [Orbitly.Accounts, Orbitly.Shortener]
 
-# Slugs, die nie als Kurzlink vergeben werden (ADR-0004): kollidieren mit
-# UI-Routen auf der Hauptdomain. Vergleich case-insensitiv.
+# Slugs that are never handed out as a short link (ADR-0004): they collide with
+# UI routes on the primary domain. Comparison is case-insensitive.
 config :orbitly,
        :reserved_slugs,
        ~w(admin api assets auth dev domains images links live login logout
           password qr register reset settings sign-in sign-out stats unlock users)
 
-# Hauptdomain (Dashboard-Host = Primärdomain). Steuert den Hostnamen der
-# Sentinel-Primärdomain, den `Orbitly.Shortener.PrimaryDomain` beim Boot
-# synchronisiert. In Prod aus MAIN_DOMAIN (config/runtime.exs) überschrieben.
+# Primary domain (dashboard host = primary domain). Controls the hostname of the
+# sentinel primary domain that `Orbitly.Shortener.PrimaryDomain` synchronizes at
+# boot. Overridden from MAIN_DOMAIN (config/runtime.exs) in prod.
 config :orbitly, :main_domain, "localhost"
 
-# Beim App-Start die Primärdomain gegen :main_domain abgleichen. In Tests aus:
-# dort verwalten Fixtures die Domains selbst.
+# On app start, reconcile the primary domain against :main_domain. Off in tests:
+# there fixtures manage the domains themselves.
 config :orbitly, :ensure_primary_domain, true
 
 # Configure the endpoint

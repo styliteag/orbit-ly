@@ -29,7 +29,7 @@ defmodule OrbitlyWeb.LiveUserAuth do
     end
   end
 
-  # Instanz-Admin (ADR-0006): nur Benutzer mit admin-Flag.
+  # Instance admin (ADR-0006): only users with the admin flag.
   def on_mount(:live_admin_required, _params, _session, socket) do
     case socket.assigns[:current_user] do
       %{admin: true} -> {:cont, socket}

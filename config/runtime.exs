@@ -64,8 +64,8 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  # Hauptdomain = Dashboard-Host = Primärdomain. Einzige Quelle für den
-  # Hostnamen; PrimaryDomain gleicht die Sentinel-Row beim Boot daran ab.
+  # Primary domain = dashboard host. Single source for the hostname;
+  # PrimaryDomain reconciles the sentinel row against it at boot.
   main_domain =
     System.get_env("MAIN_DOMAIN") ||
       raise """
