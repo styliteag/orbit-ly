@@ -8,7 +8,7 @@ Begriffe der Domäne. In Code und Gesprächen genau so verwenden.
 | **Instanz-Admin** | Benutzer mit `admin`-Flag. Verwaltet Domains und Benutzer und hat Vollzugriff auf alle Links (ADR-0006). |
 | **Mandant** | Fachlich identisch mit Benutzer. Isolation zeilenbasiert über `owner_id` (Ash attribute-Multitenancy). |
 | **Domain** | Ein konkreter, vom Instanz-Admin angelegter Hostname (z. B. `go.short.example`), unter dem Kurzlinks erreichbar sind. Von allen Benutzern gemeinsam genutzt (ADR-0003). |
-| **Hauptdomain** | Die als primär markierte Domain. Nur dort läuft das Dashboard (UI); alle anderen Domains sind reine Redirect-Hosts (ADR-0004). |
+| **Hauptdomain** | Die als primär markierte Domain (Sentinel-Row). Nur dort läuft das Dashboard (UI); alle anderen Domains sind reine Redirect-Hosts (ADR-0004). Ihr Hostname kommt aus `MAIN_DOMAIN` und wird beim Boot synchronisiert — ändern zieht Dashboard und dort liegende Links auf die neue Domain um. |
 | **Wildcard-Domain** | Reines Infrastruktur-Detail: Der Reverse Proxy leitet `*.short.example` pauschal an die App und terminiert TLS per Wildcard-Zertifikat. Fachlich existieren nur konkrete Domains. |
 | **Link** | Die zentrale Entität: gehört genau einem Benutzer, hängt an genau einer Domain, bildet einen Slug auf eine Ziel-URL ab. Optional: Ablaufdatum, Passwortschutz. |
 | **Slug** | Der Pfadteil eines Kurzlinks (`go.short.example/<slug>`). Eindeutig pro `(Domain, Slug)` über alle Benutzer. Entweder generiert oder vom Benutzer gewählt (Custom Slug). |

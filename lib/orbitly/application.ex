@@ -20,6 +20,10 @@ defmodule Orbitly.Application do
       Orbitly.Shortener.ClickBuffer,
       Orbitly.Shortener.ClickRetention,
       Orbitly.Shortener.RateLimiter,
+      # Sync the sentinel primary domain to MAIN_DOMAIN before serving, so the
+      # dashboard host is correct on the very first request after a config
+      # change. Runs after migrations/RedirectCache, before the endpoint.
+      Orbitly.Shortener.PrimaryDomain,
       # Start to serve requests, typically the last entry
       OrbitlyWeb.Endpoint,
       {AshAuthentication.Supervisor, [otp_app: :orbitly]}

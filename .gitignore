@@ -41,3 +41,7 @@ npm-debug.log
 
 # Docker data
 data/
+
+# Prod-Secrets — nur .env.example wird eingecheckt.
+.env
+!.env.example

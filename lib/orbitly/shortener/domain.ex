@@ -20,10 +20,13 @@ defmodule Orbitly.Shortener.Domain do
   end
 
   actions do
-    defaults [:read, :destroy]
+    defaults [:read]
 
+    # is_primary is intentionally NOT accepted: the primary is the env-driven
+    # sentinel row managed by Orbitly.Shortener.PrimaryDomain, so admins can
+    # only create plain redirect domains here.
     create :create do
-      accept [:hostname, :is_primary, :active]
+      accept [:hostname, :active]
       change Orbitly.Shortener.Changes.NormalizeHostname
     end
 
@@ -31,13 +34,16 @@ defmodule Orbitly.Shortener.Domain do
       accept [:hostname, :active]
       require_atomic? false
       change Orbitly.Shortener.Changes.NormalizeHostname
+      # The primary must stay reachable — never let it be deactivated here.
+      change Orbitly.Shortener.Changes.ProtectPrimary
     end
 
-    update :make_primary do
-      accept []
+    # The primary is managed via MAIN_DOMAIN, and deleting it would orphan its
+    # links and take down the dashboard host.
+    destroy :destroy do
+      primary? true
       require_atomic? false
-      change set_attribute(:is_primary, true)
-      change Orbitly.Shortener.Changes.UnsetOtherPrimaries
+      change Orbitly.Shortener.Changes.ProtectPrimary
     end
   end
 

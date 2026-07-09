@@ -55,15 +55,14 @@ CI baut bei jedem Tag ein **amd64**-Image nach `ghcr.io/styliteag/orbit-ly:<vers
 
 ### 2. Secrets & `.env`
 
-`compose.prod.yml` liest die Werte aus einem `.env` daneben:
+`compose.prod.yml` liest die Werte aus einem `.env` daneben. Vorlage kopieren
+und ausfüllen (die `.env` selbst ist gitignored):
 
 ```sh
-cat > .env <<EOF
-ORBITLY_VERSION=0.1.3
-PHX_HOST=go.example.com
-SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')
-TOKEN_SIGNING_SECRET=$(openssl rand -base64 48 | tr -d '\n')
-EOF
+cp .env.example .env
+# MAIN_DOMAIN setzen, Secrets erzeugen:
+echo "SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')" >> .env
+echo "TOKEN_SIGNING_SECRET=$(openssl rand -base64 48 | tr -d '\n')" >> .env
 ```
 
 | Variable | Pflicht | Default | Bedeutung |
@@ -71,7 +70,7 @@ EOF
 | `DATABASE_PATH` | ja | — | SQLite-Datei, im Compose auf `/data/orbitly.db` gesetzt |
 | `SECRET_KEY_BASE` | ja | — | Cookie-/Session-Signatur, ≥ 64 Zeichen |
 | `TOKEN_SIGNING_SECRET` | ja | — | Signatur der Auth-Tokens |
-| `PHX_HOST` | ja | `example.com` | Hauptdomain (Dashboard-Host) für URL-Erzeugung |
+| `MAIN_DOMAIN` | ja | — | Hauptdomain = Dashboard-Host = Primärdomain. Beim Boot als Hostname der Primärdomain gesetzt |
 | `PORT` | nein | `4000` | HTTP-Port im Container (Traefik zeigt hierhin) |
 | `POOL_SIZE` | nein | `10` | DB-Connection-Pool |
 | `TRUSTED_PROXY_HOPS` | nein | `1` | Anzahl Reverse-Proxies (Traefik = 1; CDN/LB davor → erhöhen) |
@@ -89,7 +88,7 @@ Manuell (z. B. Vorabprüfung ohne Server-Start) geht weiterhin:
 docker compose -f compose.prod.yml run --rm app /app/bin/migrate
 ```
 
-### 4. Ersten Admin + Hauptdomain anlegen
+### 4. Ersten Admin anlegen
 
 Es gibt **keine** offene Registrierung. Den Instanz-Admin legt der Release-Task
 `bin/create_admin` an (idempotent, liest `ADMIN_EMAIL`/`ADMIN_PASSWORD`):
@@ -101,23 +100,18 @@ docker compose -f compose.prod.yml run --rm \
   app /app/bin/create_admin
 ```
 
-Die Hauptdomain legt der Task `bin/create_domain` an (idempotent, liest
-`DOMAIN_HOSTNAME`; primär per Default, `DOMAIN_PRIMARY=false` für eine reine
-Redirect-Domain). Anders als ein roher `Ash.Seed` läuft er durch die echte
-Create-Action, normalisiert und validiert also den Hostnamen:
+Die **Hauptdomain** braucht keinen Task: sie kommt aus `MAIN_DOMAIN` und wird
+beim Container-Start als Primärdomain in die DB synchronisiert (angelegt oder
+umbenannt). `MAIN_DOMAIN` später ändern zieht Dashboard **und** alle dort
+liegenden Links auf die neue Domain um — nur neu ausrollen, kein weiterer
+Schritt. Weitere Redirect-Domains legst du im Admin-UI an.
 
-```sh
-docker compose -f compose.prod.yml run --rm \
-  -e DOMAIN_HOSTNAME=go.example.com \
-  app /app/bin/create_domain
-```
-
-Danach `docker compose -f compose.prod.yml up -d`, Login unter `https://$PHX_HOST`;
+Danach `docker compose -f compose.prod.yml up -d`, Login unter `https://$MAIN_DOMAIN`;
 weitere Domains und Benutzer im Admin-UI.
 
 ### 5. Traefik-Routing
 
-Die App bedient **mehrere** Hostnamen: das Dashboard auf `PHX_HOST` und jede
+Die App bedient **mehrere** Hostnamen: das Dashboard auf `MAIN_DOMAIN` und jede
 Redirect-Domain. Unbekannte Hosts → 404 (ADR-0003). Zwei Modelle (Labels in
 `compose.prod.yml`):
 

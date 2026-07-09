@@ -27,8 +27,10 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?in .env setzen}
       # `openssl rand -base64 48 | tr -d '\n'`
       TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?in .env setzen}
-      # Hauptdomain (Dashboard-Host), z. B. go.example.com
-      PHX_HOST: ${PHX_HOST:?Dashboard-Hostname setzen}
+      # Hauptdomain = Dashboard-Host = Primärdomain, z. B. go.example.com.
+      # Beim Boot als Hostname der Primärdomain synchronisiert; ändern zieht
+      # Dashboard + alle Links dort auf die neue Domain um.
+      MAIN_DOMAIN: ${MAIN_DOMAIN:?Hauptdomain setzen}
 
       # --- Optional (Defaults gezeigt) ---
       PORT: "4000"

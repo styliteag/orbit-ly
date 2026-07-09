@@ -54,22 +54,29 @@ defmodule Orbitly.Shortener.DomainTest do
     end
   end
 
-  describe "make_primary" do
-    test "makes one domain primary and unsets all others", %{admin: admin} do
-      first = domain_fixture(%{is_primary: true})
-      second = domain_fixture()
+  describe "primary domain is protected" do
+    test "cannot be deleted", %{admin: admin} do
+      primary = domain_fixture(%{hostname: "primary.example", is_primary: true})
 
-      assert {:ok, second} = Shortener.make_primary(second, actor: admin)
-      assert second.is_primary
-
-      assert {:ok, first} = Ash.get(Orbitly.Shortener.Domain, first.id, actor: admin)
-      refute first.is_primary
+      assert {:error, %Ash.Error.Invalid{}} =
+               Shortener.destroy_domain(primary, actor: admin)
     end
 
-    test "non-admin users are forbidden", %{user: user} do
-      domain = domain_fixture()
+    test "cannot be deactivated", %{admin: admin} do
+      primary = domain_fixture(%{hostname: "primary.example", is_primary: true})
 
-      assert {:error, %Ash.Error.Forbidden{}} = Shortener.make_primary(domain, actor: user)
+      assert {:error, %Ash.Error.Invalid{}} =
+               Shortener.update_domain(primary, %{active: false}, actor: admin)
+    end
+
+    test "redirect domains stay deletable and deactivatable", %{admin: admin} do
+      domain = domain_fixture(%{hostname: "redirect.example"})
+
+      assert {:ok, deactivated} =
+               Shortener.update_domain(domain, %{active: false}, actor: admin)
+
+      refute deactivated.active
+      assert :ok = Shortener.destroy_domain(deactivated, actor: admin)
     end
   end
 end

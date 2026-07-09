@@ -64,6 +64,15 @@ config :orbitly,
        ~w(admin api assets auth dev domains images links live login logout
           password qr register reset settings sign-in sign-out stats unlock users)
 
+# Hauptdomain (Dashboard-Host = Primärdomain). Steuert den Hostnamen der
+# Sentinel-Primärdomain, den `Orbitly.Shortener.PrimaryDomain` beim Boot
+# synchronisiert. In Prod aus MAIN_DOMAIN (config/runtime.exs) überschrieben.
+config :orbitly, :main_domain, "localhost"
+
+# Beim App-Start die Primärdomain gegen :main_domain abgleichen. In Tests aus:
+# dort verwalten Fixtures die Domains selbst.
+config :orbitly, :ensure_primary_domain, true
+
 # Configure the endpoint
 config :orbitly, OrbitlyWeb.Endpoint,
   url: [host: "localhost"],

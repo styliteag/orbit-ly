@@ -64,12 +64,21 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  # Hauptdomain = Dashboard-Host = Primärdomain. Einzige Quelle für den
+  # Hostnamen; PrimaryDomain gleicht die Sentinel-Row beim Boot daran ab.
+  main_domain =
+    System.get_env("MAIN_DOMAIN") ||
+      raise """
+      environment variable MAIN_DOMAIN is missing.
+      Set it to the dashboard/primary hostname, e.g. go.example.com
+      """
+
+  config :orbitly, :main_domain, main_domain
 
   config :orbitly, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :orbitly, OrbitlyWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [host: main_domain, port: 443, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.

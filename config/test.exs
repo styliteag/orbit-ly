@@ -49,3 +49,6 @@ config :phoenix,
 # Redirector: unbekannte Hosts an den Router durchreichen, damit ConnCase-Tests
 # ohne Domain-Fixture funktionieren. Produktion: Default false (404, ADR-0003).
 config :orbitly, serve_ui_on_unknown_hosts: true
+
+# Kein Boot-Sync der Primärdomain: Tests legen Domains per Fixture an.
+config :orbitly, :ensure_primary_domain, false

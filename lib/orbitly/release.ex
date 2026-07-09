@@ -86,57 +86,6 @@ defmodule Orbitly.Release do
     |> Orbitly.KuttImport.Report.print()
   end
 
-  @doc """
-  Creates a redirect domain from DOMAIN_HOSTNAME (ADR-0003). Primary by default
-  — the primary domain serves the dashboard (ADR-0004); set DOMAIN_PRIMARY=false
-  to add a plain redirect domain. Goes through the real create action, so the
-  hostname is normalized and validated (unlike a raw Ash.Seed).
-  Idempotent: does nothing if the hostname already exists.
-  """
-  def create_domain do
-    load_app()
-
-    hostname =
-      System.get_env("DOMAIN_HOSTNAME") || raise "environment variable DOMAIN_HOSTNAME is missing"
-
-    is_primary = System.get_env("DOMAIN_PRIMARY", "true") != "false"
-
-    {:ok, result, _} =
-      Ecto.Migrator.with_repo(hd(repos()), fn _repo -> upsert_domain(hostname, is_primary) end)
-
-    case result do
-      {:created, name} ->
-        IO.puts("Created domain: #{name}#{if is_primary, do: " (primary)", else: ""}")
-
-      {:exists, name} ->
-        IO.puts("Domain #{name} already exists — nothing to do")
-    end
-  end
-
-  @doc false
-  def upsert_domain(hostname, is_primary) do
-    import Ecto.Query
-
-    alias Orbitly.Shortener.Domain
-
-    normalized = hostname |> String.trim() |> String.downcase()
-
-    if Orbitly.Repo.exists?(from(d in Domain, where: d.hostname == ^normalized)) do
-      {:exists, normalized}
-    else
-      domain =
-        Domain
-        |> Ash.Changeset.for_create(
-          :create,
-          %{hostname: hostname, is_primary: is_primary, active: true},
-          authorize?: false
-        )
-        |> Ash.create!()
-
-      {:created, domain.hostname}
-    end
-  end
-
   defp repos do
     Application.fetch_env!(@app, :ecto_repos)
   end

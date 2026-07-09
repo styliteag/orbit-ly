@@ -38,7 +38,9 @@ erDiagram
 
 1. `(domain_id, slug)` ist eindeutig — über alle Benutzer hinweg (geteilte Domains).
 2. Ein Slug darf nicht in der Reserved-Slug-Liste stehen (Konfiguration, gilt auf allen Domains).
-3. Genau eine Domain ist Hauptdomain; nur sie liefert das Dashboard aus.
+3. Genau eine Domain ist Hauptdomain; nur sie liefert das Dashboard aus. Ihr
+   Hostname folgt der Konfiguration `MAIN_DOMAIN` und wird beim Boot
+   synchronisiert (Sentinel-Row: stabile Id, Links bleiben erhalten).
 4. Ein Link gehört genau einem Benutzer (`owner_id`, Ash attribute-Multitenancy).
 5. Benutzer sehen/ändern nur eigene Links; Instanz-Admin alles (Ash Policies).
 6. Abgelaufener Link (`ablauf_datum < jetzt`): Redirect antwortet 410, Link bleibt für den Besitzer sichtbar.

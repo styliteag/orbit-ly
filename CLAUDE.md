@@ -46,6 +46,15 @@ docker compose run --rm app mix precommit   # vor jedem Commit
   Hotpath, in Seeds und in Fixtures legitim.
 - Slug-Regeln zentral in `Orbitly.Shortener.Slug`; Reserved-Liste in
   `config/config.exs` — bei jeder neuen UI-Route ergänzen (ADR-0004).
+- **Primärdomain ist env-gesteuert (Sentinel):** genau eine `is_primary`-Row,
+  ihr Hostname folgt `MAIN_DOMAIN` (`:orbitly, :main_domain`). `MAIN_DOMAIN`
+  ist die EINE Quelle für den Dashboard-Host — auch der Endpoint-`url`-Host
+  (kein `PHX_HOST` mehr). `Orbitly.Shortener.PrimaryDomain` (Supervisor-Child
+  vor dem Endpoint) legt sie beim Boot an oder benennt sie in-place um; Links
+  hängen an der Row-ID und ziehen mit. In Tests aus (`ensure_primary_domain:
+  false`) — dort machen Fixtures die Domains. Primär-Row ist gegen Löschen/
+  Deaktivieren geschützt (`Changes.ProtectPrimary`); `is_primary` ist NICHT im
+  `:create`-accept — kein Admin-`make_primary` mehr.
 
 ## AshSqlite-Fallstricke
 

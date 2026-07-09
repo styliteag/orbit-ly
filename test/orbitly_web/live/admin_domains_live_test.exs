@@ -11,9 +11,8 @@ defmodule OrbitlyWeb.AdminDomainsLiveTest do
              conn |> log_in(user) |> live(~p"/admin/domains")
   end
 
-  test "admin adds a domain and makes it primary", %{conn: conn} do
+  test "admin adds a redirect domain (never primary)", %{conn: conn} do
     admin = registered_admin_fixture()
-    old_primary = domain_fixture(%{hostname: "old.example", is_primary: true})
 
     {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/admin/domains")
 
@@ -26,12 +25,18 @@ defmodule OrbitlyWeb.AdminDomainsLiveTest do
 
     {:ok, domains} = Orbitly.Shortener.list_domains(actor: admin)
     new_domain = Enum.find(domains, &(&1.hostname == "new.example"))
+    refute new_domain.is_primary
+  end
 
-    view
-    |> element(~s{[phx-click="make-primary"][phx-value-id="#{new_domain.id}"]})
-    |> render_click()
+  test "the primary domain is read-only — no make-primary, deactivate or delete",
+       %{conn: conn} do
+    admin = registered_admin_fixture()
+    primary = domain_fixture(%{hostname: "primary.example", is_primary: true})
 
-    {:ok, reloaded_old} = Ash.get(Orbitly.Shortener.Domain, old_primary.id, actor: admin)
-    refute reloaded_old.is_primary
+    {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/admin/domains")
+
+    refute has_element?(view, ~s{[phx-click="make-primary"]})
+    refute has_element?(view, ~s{#domain-#{primary.id} [phx-click="delete"]})
+    refute has_element?(view, ~s{#domain-#{primary.id} [phx-click="toggle-active"]})
   end
 end

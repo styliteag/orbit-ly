@@ -4,9 +4,10 @@
 require Ash.Query
 
 # Dev only (dev_routes is set exclusively in config/dev.exs): a ready-to-use
-# admin account and the localhost primary domain, so `docker compose up`
-# gives a working instance without manual setup. NOT for production —
-# production admins are created via a release task (to be added).
+# admin account, so `docker compose up` gives a working instance without manual
+# setup. The primary domain (localhost in dev) is created by
+# `Orbitly.Shortener.PrimaryDomain` at boot from :main_domain, not here. NOT for
+# production — production admins are created via the `bin/create_admin` task.
 if Application.get_env(:orbitly, :dev_routes) do
   admin_email = "admin@localhost"
   admin_password = "orbitly-dev-password"
@@ -22,17 +23,5 @@ if Application.get_env(:orbitly, :dev_routes) do
     })
 
     IO.puts("Seeded dev admin: #{admin_email} / #{admin_password}")
-  end
-
-  unless Orbitly.Shortener.Domain
-         |> Ash.Query.filter(hostname == "localhost")
-         |> Ash.exists?(authorize?: false) do
-    Ash.Seed.seed!(Orbitly.Shortener.Domain, %{
-      hostname: "localhost",
-      is_primary: true,
-      active: true
-    })
-
-    IO.puts("Seeded dev primary domain: localhost")
   end
 end

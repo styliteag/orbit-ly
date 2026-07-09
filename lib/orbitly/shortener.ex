@@ -7,7 +7,6 @@ defmodule Orbitly.Shortener do
       define :create_domain, action: :create
       define :list_domains, action: :read
       define :update_domain, action: :update
-      define :make_primary, action: :make_primary
       define :destroy_domain, action: :destroy
     end
 

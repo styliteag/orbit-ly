@@ -1,7 +1,8 @@
 defmodule OrbitlyWeb.AdminDomainsLive do
   @moduledoc """
-  Instance-admin domain management (ADR-0003): add concrete hostnames,
-  choose the primary domain, toggle active, delete.
+  Instance-admin domain management (ADR-0003): add redirect hostnames, toggle
+  active, delete. The primary domain follows MAIN_DOMAIN (env, synced on boot)
+  and is shown read-only — it cannot be deactivated or deleted here.
   """
 
   use OrbitlyWeb, :live_view
@@ -36,15 +37,6 @@ defmodule OrbitlyWeb.AdminDomainsLive do
 
       {:error, form} ->
         {:noreply, assign(socket, :form, form)}
-    end
-  end
-
-  def handle_event("make-primary", %{"id" => id}, socket) do
-    with %Domain{} = domain <- find(socket, id),
-         {:ok, _} <- Shortener.make_primary(domain, actor: socket.assigns.current_user) do
-      {:noreply, load_domains(socket)}
-    else
-      _ -> {:noreply, put_flash(socket, :error, "Could not set primary domain")}
     end
   end
 
@@ -116,20 +108,17 @@ defmodule OrbitlyWeb.AdminDomainsLive do
             <div class="card-body py-3 px-4 sm:flex-row sm:items-center gap-3">
               <div class="min-w-0 flex-1 flex items-center gap-2">
                 <span class="font-semibold truncate">{domain.hostname}</span>
-                <span :if={domain.is_primary} class="badge badge-primary badge-sm">primary</span>
+                <span
+                  :if={domain.is_primary}
+                  class="badge badge-primary badge-sm"
+                  title="Follows MAIN_DOMAIN"
+                >
+                  primary
+                </span>
                 <span :if={!domain.active} class="badge badge-warning badge-sm">inactive</span>
               </div>
 
-              <div class="flex items-center gap-2 shrink-0">
-                <button
-                  :if={!domain.is_primary}
-                  type="button"
-                  class="btn btn-ghost btn-xs"
-                  phx-click="make-primary"
-                  phx-value-id={domain.id}
-                >
-                  Make primary
-                </button>
+              <div :if={!domain.is_primary} class="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   class="btn btn-ghost btn-xs"
