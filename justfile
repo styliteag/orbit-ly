@@ -50,6 +50,10 @@ codegen NAME:
 migrate:
     docker compose run --rm app mix ash.migrate
 
+# Bump version, update CHANGELOG.md, tag, and push.
+release type="patch":
+    ./release.sh {{type}}
+
 # --- Aufräumen ----------------------------------------------------------------
 
 # Entfernt Container UND die Dev-Caches unter ./data (deps, _build, toolchain).

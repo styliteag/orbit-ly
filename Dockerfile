@@ -40,9 +40,11 @@ RUN mix local.hex --force \
 
 # set build ENV
 ENV MIX_ENV="prod"
+ARG VERSION=unknown
 
 # install mix dependencies
-COPY mix.exs mix.lock ./
+COPY mix.exs mix.lock VERSION ./
+RUN if [ "$VERSION" != "unknown" ]; then echo -n "$VERSION" > VERSION; fi
 RUN mix deps.get --only $MIX_ENV
 RUN mkdir config
 

@@ -45,6 +45,13 @@ defmodule OrbitlyWeb.Layouts do
         </a>
       </div>
       <div class="flex-none flex items-center gap-2">
+        <span
+          id="app-version"
+          class="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-base-content/55"
+          title="Application version"
+        >
+          v{app_version()}
+        </span>
         <.link
           id="github-repository-link"
           href="https://github.com/styliteag/orbit-ly"
@@ -87,6 +94,13 @@ defmodule OrbitlyWeb.Layouts do
 
     <.flash_group flash={@flash} />
     """
+  end
+
+  defp app_version do
+    case Application.spec(:orbitly, :vsn) do
+      nil -> "dev"
+      version -> to_string(version)
+    end
   end
 
   @doc """

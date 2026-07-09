@@ -26,6 +26,13 @@ einem externen Reverse Proxy (Traefik/Caddy, Wildcard-Catch-all, TLS-Terminierun
 Konfiguration über Umgebungsvariablen (`config/runtime.exs`), SQLite-Datei auf
 einem Volume.
 
+`VERSION` ist die Versionsquelle fuer Mix und Release-Images. `release.sh`
+beziehungsweise `just release [major|minor|patch]` erhoeht die Version, fuegt
+einen datierten Abschnitt in `CHANGELOG.md` ein, committet, taggt und pusht. Der
+Tag startet `.github/workflows/release.yml`; der Workflow baut Multi-Arch-Images
+fuer `ghcr.io/styliteag/orbit-ly` und, wenn Docker-Hub-Secrets gesetzt sind, fuer
+`docker.io/styliteag/orbit-ly`.
+
 ## Dokumentation
 
 - [Domänenmodell](docs/DOMAENENMODELL.md) — Entitäten, Invarianten, Abläufe

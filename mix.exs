@@ -4,7 +4,7 @@ defmodule Orbitly.MixProject do
   def project do
     [
       app: :orbitly,
-      version: "0.1.0",
+      version: app_version(),
       elixir: "~> 1.17",
       package: [licenses: ["BUSL-1.1"]],
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -15,6 +15,13 @@ defmodule Orbitly.MixProject do
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev
     ]
+  end
+
+  defp app_version do
+    __DIR__
+    |> Path.join("VERSION")
+    |> File.read!()
+    |> String.trim()
   end
 
   # Configuration for the OTP application.
