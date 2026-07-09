@@ -11,8 +11,99 @@ on:
         description: "Tag to (re)build, for example 0.1.1"
         required: true
 
+env:
+  GHCR_IMAGE: ghcr.io/styliteag/orbit-ly
+  DOCKERHUB_IMAGE: docker.io/styliteag/orbit-ly
+  # Separate package so the "delete old versions" step never prunes the cache.
+  CACHE_IMAGE: ghcr.io/styliteag/orbit-ly-cache
+
 jobs:
-  release:
+  # Build each architecture on a NATIVE runner (no QEMU emulation) and push the
+  # resulting image by digest. Compiling the Elixir/Ash dependency tree under
+  # emulated arm64 took ~36 min on its own; native arm64 does it in a few minutes.
+  build:
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          # arm64 disabled: the native `ubuntu-24.04-arm` runner is BILLED per
+          # minute on private repos (kostet €). Re-enable if arm64 servers are
+          # needed — the merge job already handles multiple digests, so just
+          # uncomment. Do NOT add arm64 back to a single amd64 runner without
+          # this matrix: that falls back to QEMU emulation (~36 min extra).
+          # - platform: linux/arm64
+          #   arch: arm64
+          #   runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          sbom: false
+          # Per-arch registry cache in a dedicated package. Survives across runs
+          # (no 10 GB GHA-cache limit), so version-only bumps skip mix deps.compile.
+          cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:${{ matrix.arch }},mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Assemble the per-arch digests into a multi-arch manifest list, tag it, and
+  # cut the GitHub Release. Runs once, after both builds finish.
+  merge:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -38,22 +129,15 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Extracted version: $VERSION"
 
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-
-      - name: Collect image tags
-        id: image_tags
-        run: |
-          {
-            echo "tags<<IMAGE_TAGS_EOF"
-            echo "ghcr.io/styliteag/orbit-ly:${{ steps.version.outputs.version }}"
-            echo "ghcr.io/styliteag/orbit-ly:latest"
-            if [ -n "$DOCKERHUB_USERNAME" ]; then
-              echo "docker.io/styliteag/orbit-ly:${{ steps.version.outputs.version }}"
-              echo "docker.io/styliteag/orbit-ly:latest"
-            fi
-            echo "IMAGE_TAGS_EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -69,20 +153,26 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push images
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.image_tags.outputs.tags }}
-          provenance: false
-          sbom: false
-          cache-from: type=gha,scope=orbit-ly-release
-          cache-to: type=gha,scope=orbit-ly-release,mode=max
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+      - name: Create GHCR manifest list
+        working-directory: /tmp/digests
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          docker buildx imagetools create \
+            -t "${GHCR_IMAGE}:${VERSION}" \
+            -t "${GHCR_IMAGE}:latest" \
+            $(printf "${GHCR_IMAGE}@sha256:%s " *)
+          docker buildx imagetools inspect "${GHCR_IMAGE}:${VERSION}"
+
+      - name: Create Docker Hub manifest list
+        if: env.DOCKERHUB_USERNAME != ''
+        working-directory: /tmp/digests
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # imagetools copies the per-arch blobs from GHCR into Docker Hub.
+          docker buildx imagetools create \
+            -t "${DOCKERHUB_IMAGE}:${VERSION}" \
+            -t "${DOCKERHUB_IMAGE}:latest" \
+            $(printf "${GHCR_IMAGE}@sha256:%s " *)
 
       - name: Delete old GHCR package versions
         uses: actions/delete-package-versions@v5
