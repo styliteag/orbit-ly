@@ -1,7 +1,9 @@
 import Config
+
 config :orbitly,
   token_signing_secret:
     System.get_env("TOKEN_SIGNING_SECRET") || "test_only_token_signing_secret_not_for_production"
+
 config :bcrypt_elixir, log_rounds: 1
 config :ash, policies: [show_policy_breakdowns?: true], disable_async?: true
 
