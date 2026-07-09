@@ -34,6 +34,13 @@ DOCKERHUB_IMAGE="docker.io/styliteag/orbit-ly"
 BUILDER="orbitly-builder"
 
 # --- resolve platforms (env PLATFORMS wins, else the first argument) ---
+#
+# Multi-arch strategy = "Variant A": build ALL wanted arches locally in one
+# `buildx build` so a single manifest list carries both. Pushing arches
+# separately does NOT union — each push OVERWRITES the tag with only its own
+# arch. So do not mix this with the CI amd64 build on the same tag; whichever
+# runs last wins and the other arch drops out. For a real multi-arch image use
+# `all`. A single-arch invocation warns before pushing (see below).
 ARG="${1:-all}"
 if [[ -z "${PLATFORMS:-}" ]]; then
     case "$ARG" in
@@ -98,6 +105,22 @@ echo "Platforms:  $PLATFORMS"
 echo "GHCR:       $GHCR_IMAGE:$VERSION (+ :latest)"
 echo "Docker Hub: $DOCKERHUB"
 echo ""
+
+# --- single-arch warning (overwrites the tag, does not merge — see Variant A) ---
+if [[ "$PLATFORMS" != *,* ]]; then
+    echo "!! WARNING: pushing a SINGLE architecture ($PLATFORMS)." >&2
+    echo "!! Tags '$VERSION' and 'latest' will be OVERWRITTEN with a single-arch" >&2
+    echo "!! manifest. This does NOT merge with an amd64 image built by CI (or a" >&2
+    echo "!! previous push) — that architecture drops out of the tag." >&2
+    echo "!! For a real multi-arch image run:  just publish all" >&2
+    echo "" >&2
+    read -r -p "Continue with single-arch push? (y/N) " REPLY
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+    echo ""
+fi
 
 # --- dedicated multi-arch builder (persistent local layer cache across runs) ---
 if ! docker buildx inspect "$BUILDER" > /dev/null 2>&1; then
