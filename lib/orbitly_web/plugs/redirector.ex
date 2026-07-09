@@ -106,14 +106,7 @@ defmodule OrbitlyWeb.Redirector do
     })
   end
 
-  # The external reverse proxy terminates TLS and sets x-forwarded-for
-  # (ADR-0003) — first entry is the client. Fallback: peer address.
-  defp client_ip(conn) do
-    case first_header(conn, "x-forwarded-for") do
-      nil -> conn.remote_ip |> :inet.ntoa() |> to_string()
-      forwarded -> forwarded |> String.split(",", parts: 2) |> hd() |> String.trim()
-    end
-  end
+  defp client_ip(conn), do: OrbitlyWeb.ClientIP.get(conn)
 
   defp first_header(conn, name) do
     case get_req_header(conn, name) do

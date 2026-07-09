@@ -176,6 +176,22 @@ defmodule OrbitlyWeb.RedirectorTest do
 
       assert other.status == 302
     end
+
+    test "rotating the spoofable X-Forwarded-For left entry does not bypass the limit" do
+      Orbitly.Shortener.RateLimiter.clear_all()
+
+      post_wrong = fn i ->
+        build_conn()
+        |> on_host(@redirect_host)
+        |> Map.put(:remote_ip, {10, 0, 0, 1})
+        |> put_req_header("x-forwarded-for", "1.2.3.#{i}, 198.51.100.5")
+        |> post("/vault", %{"password" => "wrong"})
+      end
+
+      for i <- 1..5, do: assert(post_wrong.(i).status == 401)
+      # last XFF entry (proxy-appended) is constant → same bucket → blocked
+      assert post_wrong.(999).status == 429
+    end
   end
 
   describe "click tracking" do
@@ -186,7 +202,8 @@ defmodule OrbitlyWeb.RedirectorTest do
 
       build_conn()
       |> on_host(@redirect_host)
-      |> put_req_header("x-forwarded-for", "198.51.100.9, 10.0.0.1")
+      # real client is the last entry (appended by the trusted proxy)
+      |> put_req_header("x-forwarded-for", "10.0.0.1, 198.51.100.9")
       |> put_req_header("user-agent", "TestAgent/1.0")
       |> put_req_header("referer", "https://referrer.example/page")
       |> get("/tracked")

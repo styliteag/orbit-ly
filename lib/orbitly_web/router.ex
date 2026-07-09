@@ -21,6 +21,11 @@ defmodule OrbitlyWeb.Router do
     plug :set_actor, :user
   end
 
+  # Per-IP throttle for credential submissions (sign-in, reset request).
+  pipeline :auth_rate_limit do
+    plug OrbitlyWeb.Plugs.AuthRateLimit
+  end
+
   scope "/", OrbitlyWeb do
     pipe_through :browser
 
@@ -39,8 +44,14 @@ defmodule OrbitlyWeb.Router do
 
     get "/", PageController, :home
     get "/qr/:id", QrController, :show
-    auth_routes AuthController, Orbitly.Accounts.User, path: "/auth"
     sign_out_route AuthController
+  end
+
+  # Credential-handling routes sit behind the per-IP rate limiter.
+  scope "/", OrbitlyWeb do
+    pipe_through [:browser, :auth_rate_limit]
+
+    auth_routes AuthController, Orbitly.Accounts.User, path: "/auth"
 
     # Keine offene Registrierung (ADR-0006): kein register_path.
     # Konten legt der Instanz-Admin an.

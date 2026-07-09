@@ -71,6 +71,13 @@ docker compose run --rm app mix precommit   # vor jedem Commit
 
 - Registrierung ist hart deaktiviert (`RegistrationDisabled`-Validation) —
   beim Anfassen der Auth-Strategie NICHT versehentlich entfernen.
+- Client-IP IMMER über `OrbitlyWeb.ClientIP.get/1` ermitteln, nie den ersten
+  `x-forwarded-for`-Eintrag nehmen (spoofbar). Prod liest die IP nur aus XFF;
+  `:trusted_proxy_hops` (ENV `TRUSTED_PROXY_HOPS`, Default 1) muss zur Anzahl
+  der Reverse-Proxies passen, sonst greift Rate-Limiting am falschen Wert.
+- Auth-POSTs (`/auth/*`) sind per `AuthRateLimit`-Plug gedrosselt (10/min/IP).
+  Session-Cookie hat noch kein `secure`-Flag (LOW, `force_ssl` mildert); CSP
+  fehlt noch (Sobelow). Beides offen.
 - GeoIP/Land ist GESTRICHEN (ADR-0005-Präzisierung) — nicht wieder einbauen
   ohne neue Entscheidung.
 - Prod-Deploy noch nie durchgespielt (Release-Image bauen, Volume, Proxy).

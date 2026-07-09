@@ -84,6 +84,12 @@ if config_env() == :prod do
       System.get_env("TOKEN_SIGNING_SECRET") ||
         raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
 
+  # Number of trusted reverse proxies in front of the app. The real client
+  # IP is read this many entries from the right of x-forwarded-for, so a
+  # client cannot spoof it (ADR-0003, OrbitlyWeb.ClientIP). One proxy = 1.
+  config :orbitly,
+    trusted_proxy_hops: String.to_integer(System.get_env("TRUSTED_PROXY_HOPS") || "1")
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key
