@@ -13,6 +13,8 @@ Begriffe der Domäne. In Code und Gesprächen genau so verwenden.
 | **Link** | Die zentrale Entität: gehört genau einem Benutzer, hängt an genau einer Domain, bildet einen Slug auf eine Ziel-URL ab. Optional: Ablaufdatum, Passwortschutz. |
 | **Slug** | Der Pfadteil eines Kurzlinks (`go.short.example/<slug>`). Eindeutig pro `(Domain, Slug)` über alle Benutzer. Entweder generiert oder vom Benutzer gewählt (Custom Slug). |
 | **Reserved Slug** | Konfigurierte Liste von Slugs, die nie vergeben werden (`login`, `admin`, `stats`, …), damit UI-Routen nicht kollidieren (ADR-0004). |
+| **Root-Link** | Ein Link auf die Domain-Wurzel (`domain/`), gespeichert als leerer Slug (`""`). Admin legt ihn an, indem er `/` oder `@` ins Slug-Feld tippt. Nur auf Redirect-Domains wirksam (die Hauptdomain-Wurzel bleibt das Dashboard). Höchstens einer pro Domain. |
+| **Catch-all-Link** | Fallback-Link einer Domain, gespeichert als Slug `"*"` (Eingabe `/*` oder `*`). Fängt jede Anfrage, die keinen konkreten Slug trifft — auch mehrsegmentige Pfade. Konkreter Slug und Root-Link haben Vorrang. Höchstens einer pro Domain. |
 | **Ziel-URL** | Die lange URL, auf die ein Link weiterleitet. |
 | **Ablaufdatum** | Optionaler Zeitpunkt, ab dem ein Link nicht mehr weiterleitet. Abgelaufene Links antworten mit 410. Kein Klick-Limit (bewusst verworfen). |
 | **Passwortschutz** | Optionales Passwort am Link. Besucher sehen eine Zwischenseite (Interstitial) mit Passwortabfrage, erst danach erfolgt die Weiterleitung. |

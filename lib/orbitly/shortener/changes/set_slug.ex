@@ -16,11 +16,17 @@ defmodule Orbitly.Shortener.Changes.SetSlug do
 
   @impl true
   def change(changeset, _opts, _context) do
-    case Ash.Changeset.get_argument(changeset, :slug) do
-      slug when is_binary(slug) and slug != "" ->
+    slug = Ash.Changeset.get_argument(changeset, :slug)
+
+    cond do
+      # `/`, `@`, `/*`, `*` → the domain root ("") or catch-all ("*")
+      is_binary(slug) and not is_nil(Slug.special_slug(slug)) ->
+        Ash.Changeset.force_change_attribute(changeset, :slug, Slug.special_slug(slug))
+
+      is_binary(slug) and slug != "" ->
         Ash.Changeset.force_change_attribute(changeset, :slug, slug)
 
-      _ ->
+      true ->
         # generate only on actual execution — AshPhoenix.Form builds and
         # validates changesets long before submit
         Ash.Changeset.before_action(changeset, &generate/1)

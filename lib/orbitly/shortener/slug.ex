@@ -27,4 +27,26 @@ defmodule Orbitly.Shortener.Slug do
   end
 
   def reserved?(_), do: false
+
+  # User-typed shortcuts for the two special links a (custom) domain can have.
+  @root_inputs ~w(/ @)
+  @catchall_inputs ~w(/* *)
+
+  @doc """
+  Maps a user-typed special slug to its stored form: `""` for the domain root
+  (`/`, `@`) and `"*"` for the catch-all that answers any otherwise unmatched
+  request (`/*`, `*`). Returns `nil` for a normal slug.
+  """
+  def special_slug(input) when is_binary(input) do
+    case String.trim(input) do
+      s when s in @root_inputs -> ""
+      s when s in @catchall_inputs -> "*"
+      _ -> nil
+    end
+  end
+
+  def special_slug(_), do: nil
+
+  @doc ~S(True for a stored special slug: the root `""` or the catch-all `"*"`.)
+  def special?(slug), do: slug in ["", "*"]
 end

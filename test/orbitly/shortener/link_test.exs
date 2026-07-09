@@ -39,6 +39,49 @@ defmodule Orbitly.Shortener.LinkTest do
       assert Slug.valid_format?(link.slug)
     end
 
+    test "a root sentinel (/ or @) stores an empty slug", ctx do
+      for sentinel <- ["/", "@"] do
+        domain = domain_fixture()
+
+        assert {:ok, link} =
+                 Shortener.create_link(
+                   %{slug: sentinel, target_url: "https://root.example", domain_id: domain.id},
+                   actor: ctx.user
+                 )
+
+        assert link.slug == ""
+      end
+    end
+
+    test "a catch-all sentinel (/* or *) stores a star slug", ctx do
+      for sentinel <- ["/*", "*"] do
+        domain = domain_fixture()
+
+        assert {:ok, link} =
+                 Shortener.create_link(
+                   %{
+                     slug: sentinel,
+                     target_url: "https://fallback.example",
+                     domain_id: domain.id
+                   },
+                   actor: ctx.user
+                 )
+
+        assert link.slug == "*"
+      end
+    end
+
+    test "at most one root and one catch-all per domain", ctx do
+      root = %{slug: "/", target_url: "https://a", domain_id: ctx.domain.id}
+      catchall = %{slug: "/*", target_url: "https://b", domain_id: ctx.domain.id}
+
+      assert {:ok, _} = Shortener.create_link(root, actor: ctx.user)
+      assert {:error, %Ash.Error.Invalid{}} = Shortener.create_link(root, actor: ctx.user)
+
+      assert {:ok, _} = Shortener.create_link(catchall, actor: ctx.user)
+      assert {:error, %Ash.Error.Invalid{}} = Shortener.create_link(catchall, actor: ctx.user)
+    end
+
     test "rejects reserved slugs", ctx do
       assert {:error, %Ash.Error.Invalid{}} =
                Shortener.create_link(

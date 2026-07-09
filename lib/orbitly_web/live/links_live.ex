@@ -266,7 +266,11 @@ defmodule OrbitlyWeb.LinksLive do
               options={Enum.map(@domains, &{&1.hostname, &1.id})}
               prompt="Choose a domain"
             />
-            <.input field={@form[:slug]} label="Custom address:" placeholder="my-slug" />
+            <.input
+              field={@form[:slug]}
+              label="Custom address:"
+              placeholder="my-slug  ( / = root, /* = catch-all )"
+            />
             <.input
               type="password"
               field={@form[:password]}

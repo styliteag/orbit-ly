@@ -67,6 +67,9 @@ defmodule Orbitly.Shortener.Link do
 
     attribute :slug, :string do
       allow_nil? false
+      # "" is the stored form of the domain-root link; without this Ash's string
+      # type would coerce the empty string to nil and fail the required check.
+      constraints allow_empty?: true
       public? true
     end
 

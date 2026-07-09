@@ -272,4 +272,79 @@ defmodule OrbitlyWeb.RedirectorTest do
       assert conn.status == 302
     end
   end
+
+  describe "root and catch-all links" do
+    test "the domain root resolves the root link (empty slug)", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{slug: "", target_url: "https://root.example"})
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/")
+
+      assert conn.status == 302
+      assert get_resp_header(conn, "location") == ["https://root.example"]
+    end
+
+    test "the catch-all serves an unmatched single-segment path", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "*",
+        target_url: "https://fallback.example"
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/anything")
+
+      assert get_resp_header(conn, "location") == ["https://fallback.example"]
+    end
+
+    test "the catch-all serves a multi-segment path", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "*",
+        target_url: "https://fallback.example"
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/a/b/c")
+
+      assert conn.status == 302
+      assert get_resp_header(conn, "location") == ["https://fallback.example"]
+    end
+
+    test "a specific slug wins over the catch-all", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "promo",
+        target_url: "https://specific.example"
+      })
+
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "*",
+        target_url: "https://fallback.example"
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/promo")
+
+      assert get_resp_header(conn, "location") == ["https://specific.example"]
+    end
+
+    test "the root falls through to the catch-all when there is no root link", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "*",
+        target_url: "https://fallback.example"
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/")
+
+      assert get_resp_header(conn, "location") == ["https://fallback.example"]
+    end
+
+    test "root on a redirect host without root or catch-all is 404", _ctx do
+      conn = build_conn() |> on_host(@redirect_host) |> get("/")
+
+      assert conn.status == 404
+    end
+
+    test "the primary root is not hijacked by a root link", ctx do
+      link_fixture(ctx.user, ctx.primary, %{slug: "", target_url: "https://nope.example"})
+
+      conn = build_conn() |> on_host(@primary_host) |> get("/")
+
+      assert get_resp_header(conn, "location") != ["https://nope.example"]
+    end
+  end
 end

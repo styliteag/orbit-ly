@@ -42,4 +42,26 @@ defmodule Orbitly.Shortener.SlugTest do
       refute Slug.reserved?("some-free-slug")
     end
   end
+
+  describe "special_slug/1" do
+    test "maps root inputs to the empty slug" do
+      for input <- ["/", "@", " / ", "@ "], do: assert(Slug.special_slug(input) == "")
+    end
+
+    test "maps catch-all inputs to the star slug" do
+      for input <- ["/*", "*", " /* "], do: assert(Slug.special_slug(input) == "*")
+    end
+
+    test "returns nil for a normal or empty slug" do
+      for input <- ["promo", "", "a-b", nil, 42], do: assert(Slug.special_slug(input) == nil)
+    end
+  end
+
+  describe "special?/1" do
+    test "is true only for the stored special slugs" do
+      assert Slug.special?("")
+      assert Slug.special?("*")
+      refute Slug.special?("promo")
+    end
+  end
 end

@@ -33,19 +33,40 @@ defmodule OrbitlyWeb.Redirector do
     end
   end
 
-  defp handle_known_host(%{path_info: [slug], method: method} = conn, domain)
+  defp handle_known_host(%{method: method} = conn, domain)
        when method in ["GET", "HEAD", "POST"] do
-    if Slug.valid_format?(slug) and not Slug.reserved?(slug) do
-      resolve_slug(conn, domain, slug)
-    else
-      pass_or_404(conn, domain)
+    case candidate_slugs(conn.path_info, domain) do
+      [] -> pass_or_404(conn, domain)
+      slugs -> resolve(conn, domain, slugs)
     end
   end
 
   defp handle_known_host(conn, domain), do: pass_or_404(conn, domain)
 
-  defp resolve_slug(conn, domain, slug) do
-    case RedirectCache.fetch_link(conn.host, slug) do
+  # Stored slugs to try, in priority order. Special links live on custom
+  # (non-primary) domains only: the root is `""`, the catch-all is `"*"`. The
+  # primary domain keeps its mixed UI/redirect behaviour — only real slugs
+  # resolve there, everything else falls through to the router.
+  defp candidate_slugs([], %{is_primary: false}), do: ["", "*"]
+
+  defp candidate_slugs([segment], %{is_primary: primary?}) do
+    cond do
+      Slug.valid_format?(segment) and not Slug.reserved?(segment) ->
+        if primary?, do: [segment], else: [segment, "*"]
+
+      primary? ->
+        []
+
+      true ->
+        ["*"]
+    end
+  end
+
+  defp candidate_slugs(_multi_segment, %{is_primary: false}), do: ["*"]
+  defp candidate_slugs(_path, _domain), do: []
+
+  defp resolve(conn, domain, slugs) do
+    case first_link(conn.host, slugs) do
       :not_found ->
         pass_or_404(conn, domain)
 
@@ -56,6 +77,15 @@ defmodule OrbitlyWeb.Redirector do
           conn.method == "POST" -> pass_or_404(conn, domain)
           true -> redirect_to_target(conn, link)
         end
+    end
+  end
+
+  defp first_link(_host, []), do: :not_found
+
+  defp first_link(host, [slug | rest]) do
+    case RedirectCache.fetch_link(host, slug) do
+      {:ok, link} -> {:ok, link}
+      :not_found -> first_link(host, rest)
     end
   end
 

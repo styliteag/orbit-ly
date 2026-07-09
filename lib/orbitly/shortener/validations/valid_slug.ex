@@ -12,6 +12,10 @@ defmodule Orbitly.Shortener.Validations.ValidSlug do
       is_nil(slug) ->
         :ok
 
+      # "" (root) and "*" (catch-all) are stored special slugs
+      Slug.special?(slug) ->
+        :ok
+
       not Slug.valid_format?(slug) ->
         {:error,
          field: :slug, message: "must be 1-64 characters of letters, digits, dash or underscore"}
