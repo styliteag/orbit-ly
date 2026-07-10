@@ -69,7 +69,7 @@ and fill it in (the `.env` itself is gitignored):
 
 ```sh
 cp .env.example .env
-# set MAIN_DOMAIN, generate the secrets:
+# set MAIN_DOMAIN and SMTP credentials, then generate the app secret:
 echo "SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')" >> .env
 ```
 
@@ -78,9 +78,20 @@ echo "SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')" >> .env
 | `DATABASE_PATH` | yes | — | SQLite file, set to `/data/orbitly.db` in the compose file |
 | `SECRET_KEY_BASE` | yes | — | cookie/session signature, ≥ 64 characters |
 | `MAIN_DOMAIN` | yes | — | primary domain = dashboard host. Set as the primary domain's hostname at boot |
+| `SMTP_RELAY` | yes | — | SMTP relay hostname, without scheme |
+| `SMTP_USERNAME` | yes | — | SMTP account username |
+| `SMTP_PASSWORD` | yes | — | SMTP account password |
+| `MAIL_FROM` | yes | — | sender email address for password resets |
+| `MAIL_FROM_NAME` | no | `Orbit-ly` | sender display name |
+| `SMTP_PORT` | no | `587` | SMTP submission port |
 | `PORT` | no | `4000` | HTTP port inside the container (Traefik points here) |
 | `POOL_SIZE` | no | `10` | DB connection pool |
 | `TRUSTED_PROXY_HOPS` | no | `1` | number of reverse proxies (Traefik = 1; a CDN/LB in front → increase) |
+
+The mailer enforces authenticated STARTTLS and verifies the relay's TLS
+certificate; most providers expose this on port 587. Configure SPF and DKIM for
+the `MAIL_FROM` domain at the mail provider. Before go-live, request a password
+reset against the deployed instance and verify both delivery and the reset link.
 
 ### 3. Migrations
 

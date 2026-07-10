@@ -23,8 +23,8 @@ config :orbitly, OrbitlyWeb.Endpoint,
     ]
   ]
 
-# Configure Swoosh API Client
-config :swoosh, api_client: Swoosh.ApiClient.Req
+# SMTP does not use Swoosh's HTTP API client.
+config :swoosh, :api_client, false
 
 # Disable Swoosh Local Memory Storage
 config :swoosh, local: false

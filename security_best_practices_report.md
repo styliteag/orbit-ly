@@ -12,7 +12,7 @@ Der Review identifizierte drei anonym ausnutzbare Availability-Probleme. Sie wur
 2. Die Click-Tracking-Queue hatte eine unbeschränkte Mailbox und persistierte jeden öffentlichen Treffer.
 3. Der ETS-Rate-Limiter prüfte und erhöhte Zähler nicht atomar; parallele Requests konnten das Limit überschreiten.
 
-Passwort-Reset, Produktions-Mailer, Datenschutz und Release-Supply-Chain bleiben vor dem ersten öffentlichen Release zu härten.
+Datenschutz und Release-Supply-Chain bleiben vor dem ersten öffentlichen Release zu härten. Der Produktions-Mailer und der Reset-Token-Lebenszyklus sind nun technisch vorbereitet; ein echter Zustelltest mit dem gewählten SMTP-Provider bleibt Teil des Deployments.
 
 ## Scope und durchgeführte Prüfungen
 
@@ -20,9 +20,9 @@ Geprüft wurden die anonym erreichbaren HTTP-/LiveView-Flows, Redirect-Auflösun
 
 Validierung:
 
-- `docker compose run --rm app mix precommit`: 166 Tests erfolgreich nach der Umsetzung von ORB-SEC-001 bis 003.
+- `docker compose run --rm app mix precommit`: 170 Tests erfolgreich nach der Umsetzung von ORB-SEC-001 bis 005.
 - `docker compose run --rm app mix hex.audit`: keine zurückgezogenen Pakete oder bekannten Hex-Security-Advisories.
-- Produktions-Image lokal erfolgreich gebaut.
+- Produktions-Image lokal erfolgreich gebaut. Das Release startete mit vollständiger SMTP-Runtime-Konfiguration inklusive Migrationen und Endpoint; ohne SMTP-Pflichtvariablen brach es wie vorgesehen vor dem Start ab.
 - Docker Scout nach dem Runtime-Hardening: 113 Pakete, 0 Critical, 0 High, 1 Medium, 23 Low und 3 nicht eingestufte Findings. Das verbliebene Medium-Finding betrifft `tar`, das die Anwendung nicht aufruft. Das Image wurde zusätzlich ohne Perl gestartet; Migrationen und die vollständige OTP-Anwendung liefen erfolgreich an.
 
 ## Hohe Priorität / Release-Blocker
@@ -79,11 +79,15 @@ Validierung:
 
 ### ORB-SEC-004: Passwort-Reset-Limit läuft zu früh ab; Reset-Tokens sammeln sich an
 
+**Status:** Behoben am 2026-07-10. Rate-Limit-Einträge werden anhand ihres tatsächlichen Windows bereinigt. Nach erfolgreicher Zustellung bleibt pro Benutzer genau ein Reset-Token aktiv. Schlägt die Zustellung fehl oder wirft der Adapter eine Exception, wird nur der neu erzeugte Token entfernt und ein zuvor erfolgreich zugestellter Token bleibt gültig.
+
 **Beleg:** Der Reset fordert 3 Requests pro 60 Minuten (`lib/orbitly_web/live/user_forgot_password_live.ex:37-63`). Der generische Sweeper löscht jedoch alle Keys, die älter als fünf Minuten sind (`lib/orbitly/shortener/rate_limiter.ex:12,48-62`), unabhängig vom Window des Eintrags. Dadurch wird das Stundenlimit nach spätestens etwa zehn Minuten zurückgesetzt. Jeder erlaubte Request für eine existierende Adresse legt vor dem Mailversand einen weiteren Token an (`lib/orbitly/accounts.ex:82-87`); abgelaufene, unbenutzte Reset-Tokens werden nicht regelmäßig bereinigt.
 
 **Empfehlung:** Pro Eintrag ein Ablaufdatum bzw. Window speichern und danach sweepen; Reset zusätzlich pro IP und normalisierter Adresse limitieren; vor dem Erzeugen eines neuen Reset-Tokens ältere Reset-Tokens des Users löschen oder upserten; abgelaufene Tokens regelmäßig purgen.
 
 ### ORB-SEC-005: Produktions-Mailer versendet keine echten Reset-Mails
+
+**Status:** Behoben am 2026-07-10. Produktion überschreibt den lokalen Adapter mit dem generischen SMTP-Adapter. Relay, Credentials, Absender und Port kommen ausschließlich aus Runtime-Umgebungsvariablen; fehlende Pflichtwerte verhindern einen unsicheren Fehlstart. Authentifiziertes STARTTLS wird erzwungen und das Relay-Zertifikat geprüft. Delivery-Fehler werden intern protokolliert und hinterlassen keinen neuen nutzbaren Reset-Token. Die öffentliche Antwort bleibt absichtlich generisch.
 
 **Beleg:** Der globale Mailer bleibt auf `Swoosh.Adapters.Local` (`config/config.exs:47-54`), während Produktion nur den lokalen Speicher deaktiviert (`config/prod.exs:26-30`). Ein externer Produktionsadapter, Absender und Credentials werden nicht gesetzt. Der anonyme Flow zeigt trotzdem immer Erfolg und ignoriert den Delivery-Rückgabewert (`lib/orbitly_web/live/user_forgot_password_live.ex:42-57`).
 
@@ -140,7 +144,7 @@ Validierung:
 ## Deployment-Checkliste vor Go-live
 
 1. ORB-SEC-001 bis 003 sind behoben; vor Go-live zusätzlich einen externen Lasttest gegen eine produktionsnahe Instanz ausführen.
-2. Produktions-Mailer konfigurieren und einen echten Reset-End-to-End-Test durchführen.
+2. SMTP-Variablen setzen und einen echten Reset-End-to-End-Test einschließlich Zustellung durchführen; SPF/DKIM des Absenders prüfen.
 3. Nur konkrete Traefik-Hosts routen; die Catch-all-Regel nicht ohne harte Host-/Rate-Grenzen verwenden.
 4. Sicherstellen, dass der einzige direkte Netzwerkpfad zur App über den vertrauenswürdigen Proxy führt und dieser `X-Forwarded-*` kontrolliert setzt. `TRUSTED_PROXY_HOPS` muss exakt zur Kette passen.
 5. SQLite-Volume und Backups verschlüsseln/schützen; Restore testen; Retention und Token-/Click-Löschung auch für Backups definieren.

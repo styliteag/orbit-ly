@@ -9,6 +9,8 @@ defmodule Orbitly.Accounts do
 
   import Ecto.Query
 
+  require Logger
+
   alias Orbitly.Repo
   alias Orbitly.Accounts.{User, UserNotifier, UserToken}
 
@@ -79,11 +81,63 @@ defmodule Orbitly.Accounts do
   Delivers reset instructions. `reset_url_fun` receives the encoded token and
   returns the full reset URL.
   """
-  def deliver_user_reset_password_instructions(%User{} = user, reset_url_fun)
-      when is_function(reset_url_fun, 1) do
+  def deliver_user_reset_password_instructions(
+        %User{} = user,
+        reset_url_fun,
+        deliverer \\ &UserNotifier.deliver_reset_password_instructions/2
+      )
+      when is_function(reset_url_fun, 1) and is_function(deliverer, 2) do
     {encoded_token, user_token} = UserToken.build_email_token(user, "reset_password")
-    Repo.insert!(user_token)
-    UserNotifier.deliver_reset_password_instructions(user, reset_url_fun.(encoded_token))
+    reset_url = reset_url_fun.(encoded_token)
+    user_token = Repo.insert!(user_token)
+
+    delivery_result =
+      try do
+        deliverer.(user, reset_url)
+      rescue
+        _exception ->
+          {:delivery_exception, :error}
+      catch
+        kind, _reason ->
+          {:delivery_exception, kind}
+      end
+
+    case delivery_result do
+      {:ok, _metadata} = delivered ->
+        Repo.delete_all(
+          from(t in UserToken,
+            where:
+              t.user_id == ^user.id and t.context == "reset_password" and t.id != ^user_token.id
+          )
+        )
+
+        delivered
+
+      {:error, _reason} = error ->
+        delete_reset_token(user_token)
+        Logger.warning("Password reset email delivery failed for user_id=#{user.id}")
+        error
+
+      {:delivery_exception, kind} ->
+        delete_reset_token(user_token)
+
+        Logger.error("Password reset email delivery aborted for user_id=#{user.id} kind=#{kind}")
+
+        {:error, :delivery_failed}
+
+      _unexpected ->
+        delete_reset_token(user_token)
+
+        Logger.error(
+          "Password reset email delivery returned an invalid result for user_id=#{user.id}"
+        )
+
+        {:error, :delivery_failed}
+    end
+  end
+
+  defp delete_reset_token(%UserToken{id: id}) do
+    Repo.delete_all(from(t in UserToken, where: t.id == ^id))
   end
 
   @doc "Returns the user for a valid, unexpired reset token, or nil."

@@ -9,7 +9,7 @@ defmodule Orbitly.Accounts.UserNotifier do
     email =
       new()
       |> to(recipient)
-      |> from({"orbit-ly", "noreply@example.com"})
+      |> from(Application.fetch_env!(:orbitly, :mailer_from))
       |> subject(subject)
       |> html_body(body)
 

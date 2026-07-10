@@ -56,6 +56,7 @@ config :phoenix_live_view,
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :orbitly, Orbitly.Mailer, adapter: Swoosh.Adapters.Local
+config :orbitly, :mailer_from, {"Orbit-ly", "noreply@localhost"}
 
 # Configure esbuild (the version is required)
 config :esbuild,

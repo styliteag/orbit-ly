@@ -126,21 +126,46 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :orbitly, Orbitly.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://swoosh.hexdocs.pm/Swoosh.html#module-installation for details.
+  fetch_nonempty_env = fn name ->
+    case System.get_env(name) do
+      value when is_binary(value) ->
+        if String.trim(value) == "" do
+          raise "environment variable #{name} must not be empty"
+        else
+          value
+        end
+
+      nil ->
+        raise "environment variable #{name} is missing"
+    end
+  end
+
+  smtp_relay = fetch_nonempty_env.("SMTP_RELAY")
+  smtp_username = fetch_nonempty_env.("SMTP_USERNAME")
+  smtp_password = fetch_nonempty_env.("SMTP_PASSWORD")
+  mail_from = fetch_nonempty_env.("MAIL_FROM")
+
+  smtp_port =
+    case Integer.parse(System.get_env("SMTP_PORT", "587")) do
+      {port, ""} when port in 1..65_535 -> port
+      _ -> raise "environment variable SMTP_PORT must be an integer between 1 and 65535"
+    end
+
+  config :orbitly, Orbitly.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: smtp_relay,
+    username: smtp_username,
+    password: smtp_password,
+    port: smtp_port,
+    ssl: false,
+    tls: :always,
+    auth: :always,
+    retries: 2,
+    tls_options: [
+      verify: :verify_peer,
+      cacerts: :public_key.cacerts_get(),
+      server_name_indication: String.to_charlist(smtp_relay)
+    ]
+
+  config :orbitly, :mailer_from, {System.get_env("MAIL_FROM_NAME", "Orbit-ly"), mail_from}
 end

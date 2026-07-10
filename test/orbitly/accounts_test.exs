@@ -189,16 +189,78 @@ defmodule Orbitly.AccountsTest do
     test "an invalid reset token yields no user" do
       refute Accounts.get_user_by_reset_password_token("not-a-real-token")
     end
+
+    test "a successfully delivered reset replaces older reset tokens" do
+      user = user_fixture()
+      first_token = capture_reset_token(user)
+      second_token = capture_reset_token(user)
+
+      refute Accounts.get_user_by_reset_password_token(first_token)
+      assert %User{id: id} = Accounts.get_user_by_reset_password_token(second_token)
+      assert id == user.id
+    end
+
+    test "a delivery error removes only the new token and preserves the prior one" do
+      user = user_fixture()
+      prior_token = capture_reset_token(user)
+      parent = self()
+
+      assert {:error, :smtp_unavailable} =
+               Accounts.deliver_user_reset_password_instructions(
+                 user,
+                 fn token ->
+                   send(parent, {:failed_token, token})
+                   "http://localhost/password-reset/#{token}"
+                 end,
+                 fn _user, _url -> {:error, :smtp_unavailable} end
+               )
+
+      assert_receive {:failed_token, failed_token}
+      refute Accounts.get_user_by_reset_password_token(failed_token)
+      assert %User{id: id} = Accounts.get_user_by_reset_password_token(prior_token)
+      assert id == user.id
+    end
+
+    test "a delivery exception does not leave a usable reset token" do
+      user = user_fixture()
+      parent = self()
+
+      assert {:error, :delivery_failed} =
+               Accounts.deliver_user_reset_password_instructions(
+                 user,
+                 fn token ->
+                   send(parent, {:raised_token, token})
+                   "http://localhost/password-reset/#{token}"
+                 end,
+                 fn _user, _url -> raise "SMTP connection failed" end
+               )
+
+      assert_receive {:raised_token, token}
+      refute Accounts.get_user_by_reset_password_token(token)
+    end
+
+    test "reset email uses the configured sender" do
+      user = user_fixture()
+
+      assert {:ok, email} =
+               Accounts.deliver_user_reset_password_instructions(
+                 user,
+                 &"http://localhost/password-reset/#{&1}"
+               )
+
+      assert email.from == {"Orbit-ly", "noreply@localhost"}
+    end
   end
 
   defp capture_reset_token(user) do
     ref = make_ref()
     parent = self()
 
-    Accounts.deliver_user_reset_password_instructions(user, fn token ->
-      send(parent, {ref, token})
-      "http://localhost/password-reset/#{token}"
-    end)
+    assert {:ok, _email} =
+             Accounts.deliver_user_reset_password_instructions(user, fn token ->
+               send(parent, {ref, token})
+               "http://localhost/password-reset/#{token}"
+             end)
 
     receive do
       {^ref, token} -> token
