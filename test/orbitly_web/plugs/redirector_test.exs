@@ -210,7 +210,7 @@ defmodule OrbitlyWeb.RedirectorTest do
 
       Orbitly.Shortener.ClickBuffer.flush_now()
 
-      assert {:ok, [event]} = Shortener.list_click_events(actor: admin)
+      assert [event] = Shortener.list_click_events(admin)
       assert event.link_id == link.id
       assert event.ip == "198.51.100.9"
       assert event.user_agent == "TestAgent/1.0"
@@ -236,7 +236,7 @@ defmodule OrbitlyWeb.RedirectorTest do
       build_conn() |> on_host(@redirect_host) |> get("/locked")
 
       Orbitly.Shortener.ClickBuffer.flush_now()
-      assert {:ok, []} = Shortener.list_click_events(actor: admin)
+      assert [] = Shortener.list_click_events(admin)
     end
   end
 
@@ -245,14 +245,14 @@ defmodule OrbitlyWeb.RedirectorTest do
       {:ok, link} =
         Shortener.create_link(
           %{slug: "fresh", target_url: "https://old.example/", domain_id: ctx.redirect_domain.id},
-          actor: ctx.user
+          ctx.user
         )
 
       conn = build_conn() |> on_host(@redirect_host) |> get("/fresh")
       assert get_resp_header(conn, "location") == ["https://old.example/"]
 
       {:ok, _} =
-        Shortener.update_link(link, %{target_url: "https://new.example/"}, actor: ctx.user)
+        Shortener.update_link(link, %{target_url: "https://new.example/"}, ctx.user)
 
       conn = build_conn() |> on_host(@redirect_host) |> get("/fresh")
       assert get_resp_header(conn, "location") == ["https://new.example/"]
@@ -265,7 +265,7 @@ defmodule OrbitlyWeb.RedirectorTest do
       {:ok, _} =
         Shortener.create_link(
           %{slug: "soon", target_url: "https://example.org/", domain_id: ctx.redirect_domain.id},
-          actor: ctx.user
+          ctx.user
         )
 
       conn = build_conn() |> on_host(@redirect_host) |> get("/soon")

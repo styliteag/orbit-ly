@@ -27,7 +27,7 @@ defmodule Orbitly.Shortener.PrimaryDomainTest do
     assert domain.hostname == "new.example"
     assert domain.is_primary
 
-    {:ok, reloaded} = Ash.get(Link, link.id, authorize?: false)
+    reloaded = Repo.get(Link, link.id)
     assert reloaded.domain_id == primary.id
   end
 

@@ -20,6 +20,8 @@ defmodule Orbitly.KuttImport do
 
   require Ash.Query
 
+  import Ecto.Query
+
   alias Orbitly.Accounts.User
   alias Orbitly.Repo
   alias Orbitly.Shortener.{ClickEvent, Domain, Link, Slug}
@@ -93,17 +95,21 @@ defmodule Orbitly.KuttImport do
   defp seed_link(kutt_link, slug, owner_id, domain_id, created) do
     updated = parse_dt(kutt_link["updated_at"]) || created
 
-    Ash.Seed.seed!(Link, %{
+    Repo.insert!(%Link{
       slug: slug,
       target_url: kutt_link["target"],
       description: kutt_link["description"],
       expires_at: kutt_link["expire_in"] |> parse_dt() |> truncate_second(),
       domain_id: domain_id,
       owner_id: owner_id,
-      inserted_at: created,
-      updated_at: updated
+      inserted_at: to_usec(created),
+      updated_at: to_usec(updated)
     })
   end
+
+  # inserted_at/updated_at are :utc_datetime_usec; a struct insert dumps them
+  # directly and Ecto demands full microsecond precision, so normalize.
+  defp to_usec(%DateTime{microsecond: {us, _}} = dt), do: %{dt | microsecond: {us, 6}}
 
   defp synth_clicks(_link_id, count, _from, _to) when count <= 0, do: 0
 
@@ -114,7 +120,7 @@ defmodule Orbitly.KuttImport do
       offset = if count > 1, do: div(span * i, count - 1), else: 0
 
       %{
-        id: Ash.UUID.generate(),
+        id: Ecto.UUID.generate(),
         link_id: link_id,
         occurred_at: DateTime.add(from, offset, :microsecond),
         ip: nil,
@@ -148,10 +154,9 @@ defmodule Orbitly.KuttImport do
   end
 
   defp existing_slugs(domain_id) do
-    Link
-    |> Ash.Query.filter(domain_id == ^domain_id)
-    |> Ash.read!(authorize?: false)
-    |> MapSet.new(& &1.slug)
+    from(l in Link, where: l.domain_id == ^domain_id, select: l.slug)
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   defp fetch_admin! do
@@ -165,21 +170,13 @@ defmodule Orbitly.KuttImport do
   end
 
   defp fetch_domain!(nil) do
-    Domain
-    |> Ash.Query.filter(is_primary == true)
-    |> Ash.read!(authorize?: false)
-    |> first_or_raise("no primary domain configured")
+    Repo.one(from(d in Domain, where: d.is_primary == true)) ||
+      raise "no primary domain configured"
   end
 
   defp fetch_domain!(host) do
-    Domain
-    |> Ash.Query.filter(hostname == ^host)
-    |> Ash.read!(authorize?: false)
-    |> first_or_raise("domain #{host} not found")
+    Repo.get_by(Domain, hostname: host) || raise "domain #{host} not found"
   end
-
-  defp first_or_raise([domain | _], _msg), do: domain
-  defp first_or_raise([], msg), do: raise(msg)
 
   defp flag_protected(report, %{"password" => true}, slug), do: prepend(report, :protected, slug)
   defp flag_protected(report, _kutt_link, _slug), do: report

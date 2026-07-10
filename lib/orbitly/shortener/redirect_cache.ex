@@ -5,14 +5,15 @@ defmodule Orbitly.Shortener.RedirectCache do
   Read-through happens in the *calling* process (keeps DB access inside the
   caller's transaction/sandbox); this GenServer only owns the table. Entries
   carry a TTL as a backstop — the authoritative invalidation is a full flush
-  triggered by `Orbitly.Shortener.CacheInvalidator` on any mutation. Negative
+  triggered by `Orbitly.Shortener` on any domain/link mutation. Negative
   results are cached too, so unknown slugs cannot hammer the database.
   """
 
   use GenServer
 
-  require Ash.Query
+  import Ecto.Query
 
+  alias Orbitly.Repo
   alias Orbitly.Shortener.{Domain, Link}
 
   @table :orbitly_redirect_cache
@@ -53,34 +54,32 @@ defmodule Orbitly.Shortener.RedirectCache do
   end
 
   defp load_domain(host) do
-    Domain
-    |> Ash.Query.filter(hostname == ^host)
-    |> Ash.read_one(authorize?: false)
-    |> case do
-      {:ok, %Domain{} = domain} ->
+    case Repo.one(from(d in Domain, where: d.hostname == ^host)) do
+      %Domain{} = domain ->
         {:ok, %{id: domain.id, is_primary: domain.is_primary, active: domain.active}}
 
-      _ ->
+      nil ->
         :not_found
     end
   end
 
   defp load_link(host, slug) do
-    Link
-    |> Ash.Query.filter(slug == ^slug and domain.hostname == ^host and domain.active == true)
-    |> Ash.read_one(authorize?: false)
-    |> case do
-      {:ok, %Link{} = link} ->
-        {:ok,
-         %{
-           link_id: link.id,
-           target_url: link.target_url,
-           expires_at: link.expires_at,
-           password_hash: link.password_hash
-         }}
+    query =
+      from(l in Link,
+        join: d in Domain,
+        on: d.id == l.domain_id,
+        where: l.slug == ^slug and d.hostname == ^host and d.active == true,
+        select: %{
+          link_id: l.id,
+          target_url: l.target_url,
+          expires_at: l.expires_at,
+          password_hash: l.password_hash
+        }
+      )
 
-      _ ->
-        :not_found
+    case Repo.one(query) do
+      nil -> :not_found
+      link -> {:ok, link}
     end
   end
 end

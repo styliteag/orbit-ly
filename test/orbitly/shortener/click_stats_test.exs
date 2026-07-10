@@ -14,9 +14,11 @@ defmodule Orbitly.Shortener.ClickStatsTest do
   end
 
   defp seed_click(link, attrs) do
-    Ash.Seed.seed!(
-      ClickEvent,
-      Map.merge(%{link_id: link.id, occurred_at: DateTime.utc_now(), ip: "203.0.113.1"}, attrs)
+    Repo.insert!(
+      struct(
+        ClickEvent,
+        Map.merge(%{link_id: link.id, occurred_at: DateTime.utc_now(), ip: "203.0.113.1"}, attrs)
+      )
     )
   end
 

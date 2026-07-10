@@ -23,11 +23,12 @@ defmodule OrbitlyWeb.AdminDomainsLive do
 
   @impl true
   def handle_event("validate", %{"form" => params}, socket) do
-    {:noreply, assign(socket, :form, AshPhoenix.Form.validate(socket.assigns.form, params))}
+    changeset = Shortener.change_domain(%Domain{}, params) |> Map.put(:action, :validate)
+    {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
   end
 
   def handle_event("save", %{"form" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.form, params: params) do
+    case Shortener.create_domain(params, socket.assigns.current_user) do
       {:ok, domain} ->
         {:noreply,
          socket
@@ -35,16 +36,21 @@ defmodule OrbitlyWeb.AdminDomainsLive do
          |> load_domains()
          |> assign_new_form()}
 
-      {:error, form} ->
-        {:noreply, assign(socket, :form, form)}
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not add domain")}
     end
   end
 
   def handle_event("toggle-active", %{"id" => id}, socket) do
     with %Domain{} = domain <- find(socket, id),
          {:ok, _} <-
-           Shortener.update_domain(domain, %{active: !domain.active},
-             actor: socket.assigns.current_user
+           Shortener.update_domain(
+             domain,
+             %{active: !domain.active},
+             socket.assigns.current_user
            ) do
       {:noreply, load_domains(socket)}
     else
@@ -54,7 +60,7 @@ defmodule OrbitlyWeb.AdminDomainsLive do
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %Domain{} = domain <- find(socket, id),
-         :ok <- Shortener.destroy_domain(domain, actor: socket.assigns.current_user) do
+         :ok <- Shortener.delete_domain(domain, socket.assigns.current_user) do
       {:noreply, socket |> put_flash(:info, "Domain deleted") |> load_domains()}
     else
       _ -> {:noreply, put_flash(socket, :error, "Could not delete domain")}
@@ -64,18 +70,13 @@ defmodule OrbitlyWeb.AdminDomainsLive do
   defp find(socket, id), do: Enum.find(socket.assigns.domains, &(&1.id == id))
 
   defp load_domains(socket) do
-    {:ok, domains} = Shortener.list_domains(actor: socket.assigns.current_user)
+    domains = Shortener.list_domains()
     assign(socket, :domains, Enum.sort_by(domains, & &1.hostname))
   end
 
   defp assign_new_form(socket) do
-    form =
-      AshPhoenix.Form.for_create(Domain, :create,
-        actor: socket.assigns.current_user,
-        as: "form"
-      )
-
-    assign(socket, :form, to_form(form))
+    changeset = Shortener.change_domain(%Domain{})
+    assign(socket, :form, to_form(changeset, as: "form"))
   end
 
   @impl true

@@ -67,7 +67,7 @@ defmodule Orbitly.Shortener.ClickBuffer do
     entries =
       buffer
       |> Enum.reverse()
-      |> Enum.map(&Map.put(&1, :id, Ash.UUID.generate()))
+      |> Enum.map(&Map.put(&1, :id, Ecto.UUID.generate()))
 
     Orbitly.Repo.insert_all(Orbitly.Shortener.ClickEvent, entries)
     []

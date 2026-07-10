@@ -1,8 +1,6 @@
 defmodule Orbitly.KuttImportTest do
   use Orbitly.DataCase, async: false
 
-  require Ash.Query
-
   import Orbitly.Fixtures
 
   alias Orbitly.KuttImport
@@ -35,7 +33,7 @@ defmodule Orbitly.KuttImportTest do
   end
 
   defp links_by_slug(slug) do
-    Link |> Ash.Query.filter(slug == ^slug) |> Ash.read!(authorize?: false)
+    Repo.all(from l in Link, where: l.slug == ^slug)
   end
 
   setup do
@@ -95,10 +93,7 @@ defmodule Orbitly.KuttImportTest do
     assert report.clicks == 3
     assert [link] = links_by_slug("hot")
 
-    events =
-      ClickEvent
-      |> Ash.Query.filter(link_id == ^link.id)
-      |> Ash.read!(authorize?: false)
+    events = Repo.all(from c in ClickEvent, where: c.link_id == ^link.id)
 
     assert length(events) == 3
     assert Enum.all?(events, &(&1.user_agent == "kutt-import"))

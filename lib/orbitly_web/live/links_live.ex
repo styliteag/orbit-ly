@@ -25,6 +25,7 @@ defmodule OrbitlyWeb.LinksLive do
      |> assign(:page, 1)
      |> assign(:page_size, 20)
      |> assign(:edit_id, nil)
+     |> assign(:edit_link, nil)
      |> assign(:edit_form, nil)
      |> load_domains()
      |> load_links()
@@ -35,12 +36,16 @@ defmodule OrbitlyWeb.LinksLive do
 
   @impl true
   def handle_event("validate", %{"form" => params}, socket) do
-    {:noreply,
-     assign(socket, :form, AshPhoenix.Form.validate(socket.assigns.form, clean_params(params)))}
+    changeset =
+      %Link{}
+      |> Shortener.change_link(clean_params(params), socket.assigns.current_user)
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
   end
 
   def handle_event("save", %{"form" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.form, params: clean_params(params)) do
+    case Shortener.create_link(clean_params(params), socket.assigns.current_user) do
       {:ok, link} ->
         {:noreply,
          socket
@@ -48,8 +53,11 @@ defmodule OrbitlyWeb.LinksLive do
          |> load_links()
          |> assign_new_form()}
 
-      {:error, form} ->
-        {:noreply, assign(socket, :form, form)}
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not create link")}
     end
   end
 
@@ -84,13 +92,13 @@ defmodule OrbitlyWeb.LinksLive do
   def handle_event("edit", %{"id" => id}, socket) do
     case Enum.find(socket.assigns.links, &(&1.id == id)) do
       %Link{} = link ->
-        form =
-          AshPhoenix.Form.for_update(link, :update,
-            actor: socket.assigns.current_user,
-            as: "edit"
-          )
+        changeset = Shortener.change_link_update(link)
 
-        {:noreply, socket |> assign(:edit_id, id) |> assign(:edit_form, to_form(form))}
+        {:noreply,
+         socket
+         |> assign(:edit_id, id)
+         |> assign(:edit_link, link)
+         |> assign(:edit_form, to_form(changeset, as: "edit"))}
 
       _ ->
         {:noreply, socket}
@@ -98,36 +106,45 @@ defmodule OrbitlyWeb.LinksLive do
   end
 
   def handle_event("cancel-edit", _params, socket) do
-    {:noreply, socket |> assign(:edit_id, nil) |> assign(:edit_form, nil)}
+    {:noreply,
+     socket |> assign(:edit_id, nil) |> assign(:edit_link, nil) |> assign(:edit_form, nil)}
   end
 
   def handle_event("edit-validate", %{"edit" => params}, socket) do
-    {:noreply,
-     assign(
-       socket,
-       :edit_form,
-       AshPhoenix.Form.validate(socket.assigns.edit_form, clean_params(params))
-     )}
+    changeset =
+      socket.assigns.edit_link
+      |> Shortener.change_link_update(clean_params(params))
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, :edit_form, to_form(changeset, as: "edit"))}
   end
 
   def handle_event("update", %{"edit" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.edit_form, params: clean_params(params)) do
+    case Shortener.update_link(
+           socket.assigns.edit_link,
+           clean_params(params),
+           socket.assigns.current_user
+         ) do
       {:ok, link} ->
         {:noreply,
          socket
          |> put_flash(:info, "Link /#{link.slug} updated")
          |> assign(:edit_id, nil)
+         |> assign(:edit_link, nil)
          |> assign(:edit_form, nil)
          |> load_links()}
 
-      {:error, form} ->
-        {:noreply, assign(socket, :edit_form, form)}
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :edit_form, to_form(changeset, as: "edit"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not update link")}
     end
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
     with %Link{} = link <- Enum.find(socket.assigns.links, &(&1.id == id)),
-         :ok <- Shortener.destroy_link(link, actor: socket.assigns.current_user) do
+         :ok <- Shortener.delete_link(link, socket.assigns.current_user) do
       {:noreply, socket |> put_flash(:info, "Link deleted") |> load_links()}
     else
       _ -> {:noreply, put_flash(socket, :error, "Could not delete link")}
@@ -137,15 +154,15 @@ defmodule OrbitlyWeb.LinksLive do
   # --- data ---
 
   defp load_domains(socket) do
-    {:ok, domains} = Shortener.list_domains(actor: socket.assigns.current_user)
+    domains = Shortener.list_domains()
     assign(socket, :domains, Enum.filter(domains, & &1.active))
   end
 
   defp load_links(socket) do
-    {:ok, links} =
-      Shortener.list_links(actor: socket.assigns.current_user, load: [:domain, :owner])
-
-    links = Enum.sort_by(links, & &1.inserted_at, {:desc, DateTime})
+    links =
+      socket.assigns.current_user
+      |> Shortener.list_links()
+      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
 
     socket
     |> assign(:links, links)
@@ -153,13 +170,8 @@ defmodule OrbitlyWeb.LinksLive do
   end
 
   defp assign_new_form(socket) do
-    form =
-      AshPhoenix.Form.for_create(Link, :create,
-        actor: socket.assigns.current_user,
-        as: "form"
-      )
-
-    assign(socket, :form, to_form(form))
+    changeset = Shortener.change_link(%Link{}, %{}, socket.assigns.current_user)
+    assign(socket, :form, to_form(changeset, as: "form"))
   end
 
   # Drops the duration fields and, when a duration is given, computes

@@ -1,12 +1,15 @@
 defmodule Orbitly.Fixtures do
   @moduledoc """
-  Test fixtures via Ash.Seed — bypasses actions, validations and policies
-  on purpose so tests can set up arbitrary state.
+  Test fixtures. User/token live in Accounts (Ash) and are seeded via
+  `Ash.Seed`; domains and links are plain Ecto and inserted directly — both
+  bypass actions, validations and policies on purpose so tests can set up
+  arbitrary state.
   """
 
   import Ecto.Query, only: [from: 2]
 
   alias Orbitly.Accounts.User
+  alias Orbitly.Repo
   alias Orbitly.Shortener.{Domain, Link}
 
   def user_fixture(attrs \\ %{}) do
@@ -80,8 +83,7 @@ defmodule Orbitly.Fixtures do
   end
 
   def domain_fixture(attrs \\ %{}) do
-    Ash.Seed.seed!(
-      Domain,
+    attrs =
       Map.merge(
         %{
           hostname: "go#{System.unique_integer([:positive])}.example",
@@ -90,12 +92,12 @@ defmodule Orbitly.Fixtures do
         },
         attrs
       )
-    )
+
+    Repo.insert!(struct(Domain, attrs))
   end
 
   def link_fixture(owner, domain, attrs \\ %{}) do
-    Ash.Seed.seed!(
-      Link,
+    attrs =
       Map.merge(
         %{
           slug: "s#{System.unique_integer([:positive])}",
@@ -105,6 +107,15 @@ defmodule Orbitly.Fixtures do
         },
         attrs
       )
-    )
+      |> truncate_expires_at()
+
+    Repo.insert!(struct(Link, attrs))
   end
+
+  # expires_at is stored at second precision (:utc_datetime); struct inserts
+  # bypass the cast that would truncate, so do it here.
+  defp truncate_expires_at(%{expires_at: %DateTime{} = dt} = attrs),
+    do: %{attrs | expires_at: DateTime.truncate(dt, :second)}
+
+  defp truncate_expires_at(attrs), do: attrs
 end

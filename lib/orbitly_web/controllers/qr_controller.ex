@@ -1,14 +1,14 @@
 defmodule OrbitlyWeb.QrController do
   @moduledoc """
   Serves a QR code (SVG) for a link's short URL. Authorization runs through
-  Ash policies via the actor — owners and admins only, everyone else 404.
+  `Orbitly.Shortener` via the actor — owners and admins only, everyone else 404.
   """
 
   use OrbitlyWeb, :controller
 
   def show(conn, %{"id" => id}) do
     with %{} = user <- conn.assigns[:current_user],
-         {:ok, link} <- Ash.get(Orbitly.Shortener.Link, id, actor: user, load: [:domain]) do
+         {:ok, link} <- Orbitly.Shortener.get_link(id, user) do
       svg =
         link
         |> OrbitlyWeb.ShortUrl.for_link()

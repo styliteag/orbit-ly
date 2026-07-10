@@ -23,7 +23,7 @@ defmodule OrbitlyWeb.AdminDomainsLiveTest do
     html = render(view)
     assert html =~ "new.example"
 
-    {:ok, domains} = Orbitly.Shortener.list_domains(actor: admin)
+    domains = Orbitly.Shortener.list_domains()
     new_domain = Enum.find(domains, &(&1.hostname == "new.example"))
     refute new_domain.is_primary
   end

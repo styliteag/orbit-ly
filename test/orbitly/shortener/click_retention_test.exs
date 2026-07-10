@@ -16,16 +16,18 @@ defmodule Orbitly.Shortener.ClickRetentionTest do
     fresh = DateTime.shift(DateTime.utc_now(), month: -11)
 
     for occurred_at <- [old, fresh] do
-      Ash.Seed.seed!(ClickEvent, %{
-        link_id: link.id,
-        occurred_at: occurred_at,
-        ip: "203.0.113.1"
-      })
+      Repo.insert!(
+        struct(ClickEvent, %{
+          link_id: link.id,
+          occurred_at: occurred_at,
+          ip: "203.0.113.1"
+        })
+      )
     end
 
     assert {:ok, 1} = ClickRetention.purge_now()
 
-    assert {:ok, [event]} = Shortener.list_click_events(actor: admin)
+    assert [event] = Shortener.list_click_events(admin)
     assert DateTime.compare(event.occurred_at, fresh) == :eq
   end
 

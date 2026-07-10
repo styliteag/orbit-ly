@@ -44,7 +44,7 @@ defmodule OrbitlyWeb.LinksLiveTest do
     |> render_submit()
 
     assert render(view) =~ "is reserved"
-    assert {:ok, []} = Orbitly.Shortener.list_links(actor: user)
+    assert [] = Orbitly.Shortener.list_links(user)
   end
 
   test "creates a link with description and duration-based expiry", %{
@@ -69,7 +69,7 @@ defmodule OrbitlyWeb.LinksLiveTest do
 
     assert render(view) =~ "Kampagnen-Link"
 
-    {:ok, [link]} = Orbitly.Shortener.list_links(actor: user)
+    [link] = Orbitly.Shortener.list_links(user)
     assert link.description == "Kampagnen-Link"
 
     diff = DateTime.diff(link.expires_at, DateTime.utc_now())
@@ -121,7 +121,7 @@ defmodule OrbitlyWeb.LinksLiveTest do
     assert html =~ "https://new.example/"
     assert html =~ "renamed"
 
-    {:ok, [updated]} = Orbitly.Shortener.list_links(actor: user)
+    [updated] = Orbitly.Shortener.list_links(user)
     assert updated.target_url == "https://new.example/"
     assert updated.description == "renamed"
   end

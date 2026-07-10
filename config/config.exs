@@ -55,7 +55,7 @@ config :spark,
 config :orbitly,
   ecto_repos: [Orbitly.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Orbitly.Accounts, Orbitly.Shortener]
+  ash_domains: [Orbitly.Accounts]
 
 # Slugs that are never handed out as a short link (ADR-0004): they collide with
 # UI routes on the primary domain. Comparison is case-insensitive.

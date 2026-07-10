@@ -35,14 +35,14 @@ defmodule Orbitly.Shortener.ClickBufferTest do
 
     ClickBuffer.flush_now()
 
-    assert {:ok, events} = Shortener.list_click_events(actor: ctx.admin)
+    events = Shortener.list_click_events(ctx.admin)
     assert length(events) == 3
     assert Enum.all?(events, &(&1.link_id == ctx.link.id))
   end
 
   test "flushing an empty buffer is a no-op", ctx do
     assert :ok = ClickBuffer.flush_now()
-    assert {:ok, []} = Shortener.list_click_events(actor: ctx.admin)
+    assert [] = Shortener.list_click_events(ctx.admin)
   end
 
   test "owners only read events of their own links, admins read all", ctx do
@@ -53,10 +53,10 @@ defmodule Orbitly.Shortener.ClickBufferTest do
     ClickBuffer.record(event(other_link))
     ClickBuffer.flush_now()
 
-    assert {:ok, [own_event]} = Shortener.list_click_events(actor: ctx.user)
+    assert [own_event] = Shortener.list_click_events(ctx.user)
     assert own_event.link_id == ctx.link.id
 
-    assert {:ok, all} = Shortener.list_click_events(actor: ctx.admin)
+    all = Shortener.list_click_events(ctx.admin)
     assert length(all) == 2
   end
 end

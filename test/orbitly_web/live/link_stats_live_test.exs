@@ -9,12 +9,14 @@ defmodule OrbitlyWeb.LinkStatsLiveTest do
     domain = domain_fixture(%{hostname: "go.example"})
     link = link_fixture(user, domain, %{slug: "stats-me"})
 
-    Ash.Seed.seed!(Orbitly.Shortener.ClickEvent, %{
-      link_id: link.id,
-      occurred_at: DateTime.utc_now(),
-      referrer: "https://news.example/",
-      user_agent: "Mozilla/5.0 Chrome/126.0 Safari/537.36"
-    })
+    Orbitly.Repo.insert!(
+      struct(Orbitly.Shortener.ClickEvent, %{
+        link_id: link.id,
+        occurred_at: DateTime.utc_now(),
+        referrer: "https://news.example/",
+        user_agent: "Mozilla/5.0 Chrome/126.0 Safari/537.36"
+      })
+    )
 
     %{user: user, link: link}
   end

@@ -5,110 +5,117 @@ defmodule Orbitly.Shortener.Link do
   Owned by exactly one user; slugs are unique per (domain, slug) across all
   users (ADR-0002/0003). Optional time-based expiry (expired links answer
   410, ADR "Ablauf") and optional password protection.
+
+  Slug resolution and password hashing depend on the Repo / the actor and live
+  in `Orbitly.Shortener`; the changesets here take already-resolved values.
   """
 
-  use Ash.Resource,
-    otp_app: :orbitly,
-    domain: Orbitly.Shortener,
-    data_layer: AshSqlite.DataLayer,
-    authorizers: [Ash.Policy.Authorizer],
-    notifiers: [Orbitly.Shortener.CacheInvalidator]
+  use Ecto.Schema
 
-  sqlite do
-    table "links"
-    repo Orbitly.Repo
+  import Ecto.Changeset
 
-    references do
-      reference :domain, on_delete: :delete
-      reference :owner, on_delete: :delete
-    end
-  end
+  alias Orbitly.Shortener.Slug
 
-  actions do
-    defaults [:read, :destroy]
+  @primary_key {:id, Ecto.UUID, autogenerate: true}
+  @foreign_key_type Ecto.UUID
+  @timestamps_opts [type: :utc_datetime_usec]
 
-    create :create do
-      accept [:target_url, :expires_at, :domain_id, :description]
+  schema "links" do
+    # "" is the stored form of the domain-root link, "*" the catch-all.
+    field :slug, :string
+    field :target_url, :string
+    field :description, :string
+    field :expires_at, :utc_datetime
+    field :password_hash, :string, redact: true
+    field :owner_id, Ecto.UUID
+    # Owner lives in Accounts (still Ash); the context attaches it here for
+    # display instead of a cross-framework Ecto preload.
+    field :owner, :map, virtual: true
 
-      argument :slug, :string, allow_nil?: true
-      argument :password, :string, allow_nil?: true, sensitive?: true
-
-      change relate_actor(:owner)
-      change Orbitly.Shortener.Changes.SetSlug
-      change Orbitly.Shortener.Changes.HashLinkPassword
-      validate Orbitly.Shortener.Validations.ValidSlug
-      validate Orbitly.Shortener.Validations.ValidTargetUrl
-    end
-
-    update :update do
-      accept [:target_url, :expires_at, :description]
-
-      argument :password, :string, allow_nil?: true, sensitive?: true
-
-      require_atomic? false
-      change Orbitly.Shortener.Changes.HashLinkPassword
-      validate Orbitly.Shortener.Validations.ValidTargetUrl
-    end
-  end
-
-  policies do
-    policy action_type(:create) do
-      authorize_if actor_present()
-    end
-
-    policy action_type([:read, :update, :destroy]) do
-      authorize_if actor_attribute_equals(:admin, true)
-      authorize_if relates_to_actor_via(:owner)
-    end
-  end
-
-  attributes do
-    uuid_primary_key :id
-
-    attribute :slug, :string do
-      allow_nil? false
-      # "" is the stored form of the domain-root link; without this Ash's string
-      # type would coerce the empty string to nil and fail the required check.
-      constraints allow_empty?: true
-      public? true
-    end
-
-    attribute :target_url, :string do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :description, :string do
-      public? true
-      constraints max_length: 500
-    end
-
-    attribute :expires_at, :utc_datetime do
-      public? true
-    end
-
-    attribute :password_hash, :string do
-      sensitive? true
-    end
-
-    create_timestamp :inserted_at
-    update_timestamp :updated_at
-  end
-
-  relationships do
-    belongs_to :domain, Orbitly.Shortener.Domain do
-      allow_nil? false
-      attribute_public? true
-    end
-
-    belongs_to :owner, Orbitly.Accounts.User do
-      allow_nil? false
-    end
-
+    belongs_to :domain, Orbitly.Shortener.Domain
     has_many :click_events, Orbitly.Shortener.ClickEvent
+
+    timestamps()
   end
 
-  identities do
-    identity :unique_slug_per_domain, [:domain_id, :slug]
+  @doc """
+  Create changeset. `slug`, `owner_id` and `password_hash` are derived by the
+  context and passed in `attrs` already resolved.
+  """
+  def create_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:target_url, :description, :expires_at, :domain_id, :owner_id, :password_hash])
+    # slug is resolved (custom, special or generated) by the context; set it via
+    # put_change so the root link's stored "" survives cast's empty-value pruning.
+    |> put_slug(attrs)
+    |> validate_required([:target_url, :domain_id, :owner_id])
+    |> validate_length(:description, max: 500)
+    |> validate_slug()
+    |> validate_target_url()
+    # ecto_sqlite3 derives the constraint name from the columns, not the index'
+    # actual name (links_unique_slug_per_domain_index).
+    |> unique_constraint(:slug, name: "links_domain_id_slug_index")
+    |> foreign_key_constraint(:domain_id)
+    |> foreign_key_constraint(:owner_id)
+  end
+
+  defp put_slug(changeset, attrs) do
+    case Map.fetch(attrs, :slug) do
+      {:ok, slug} when is_binary(slug) -> put_change(changeset, :slug, slug)
+      _ -> changeset
+    end
+  end
+
+  @doc """
+  Update changeset. Slug, domain and owner are immutable; `password_hash` is
+  derived by the context (`nil` clears protection, absent leaves it untouched).
+  """
+  def update_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:target_url, :description, :expires_at, :password_hash])
+    |> validate_required([:target_url])
+    |> validate_length(:description, max: 500)
+    |> validate_target_url()
+  end
+
+  defp validate_slug(changeset) do
+    case get_field(changeset, :slug) do
+      slug when is_binary(slug) ->
+        cond do
+          Slug.special?(slug) ->
+            changeset
+
+          not Slug.valid_format?(slug) ->
+            add_error(
+              changeset,
+              :slug,
+              "must be 1-64 characters of letters, digits, dash or underscore"
+            )
+
+          Slug.reserved?(slug) ->
+            add_error(changeset, :slug, "is reserved")
+
+          true ->
+            changeset
+        end
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp validate_target_url(changeset) do
+    if changed?(changeset, :target_url) do
+      case URI.new(get_change(changeset, :target_url) || "") do
+        {:ok, %URI{scheme: scheme, host: host}}
+        when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+          changeset
+
+        _ ->
+          add_error(changeset, :target_url, "must be a valid http(s) URL")
+      end
+    else
+      changeset
+    end
   end
 end

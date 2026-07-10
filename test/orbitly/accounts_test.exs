@@ -83,7 +83,7 @@ defmodule Orbitly.AccountsTest do
       link_fixture(user, domain)
 
       assert :ok = Accounts.destroy_user(user, actor: admin)
-      assert {:ok, []} = Orbitly.Shortener.list_links(actor: admin)
+      assert [] = Orbitly.Shortener.list_links(admin)
     end
   end
 

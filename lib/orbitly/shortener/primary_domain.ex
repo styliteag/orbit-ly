@@ -10,7 +10,6 @@ defmodule Orbitly.Shortener.PrimaryDomain do
   `Orbitly.Application`); a no-op in tests, where fixtures own the domains.
   """
 
-  require Ash.Query
   import Ecto.Query
 
   alias Orbitly.Repo
@@ -49,27 +48,21 @@ defmodule Orbitly.Shortener.PrimaryDomain do
   end
 
   defp primary do
-    Domain
-    |> Ash.Query.filter(is_primary == true)
-    |> Ash.read_one!(authorize?: false)
+    Repo.one(from(d in Domain, where: d.is_primary == true))
   end
 
-  # is_primary is not part of the public :create action (admins must not mint a
-  # second primary), so the create action validates/normalizes the hostname and
-  # the flag is set directly afterwards.
+  # is_primary is not part of the public create/update changesets (admins must
+  # not mint a second primary), so this uses the dedicated primary_changeset.
   defp create_primary!(hostname) do
     guard_free!(hostname, nil)
 
     domain =
-      Domain
-      |> Ash.Changeset.for_create(:create, %{hostname: hostname}, authorize?: false)
-      |> Ash.create!()
-
-    {1, _} =
-      Repo.update_all(from(d in Domain, where: d.id == ^domain.id), set: [is_primary: true])
+      %Domain{}
+      |> Domain.primary_changeset(%{hostname: hostname, is_primary: true})
+      |> Repo.insert!()
 
     RedirectCache.flush()
-    %{domain | is_primary: true}
+    domain
   end
 
   defp rename_primary!(domain, hostname) do
@@ -77,8 +70,8 @@ defmodule Orbitly.Shortener.PrimaryDomain do
 
     updated =
       domain
-      |> Ash.Changeset.for_update(:update, %{hostname: hostname}, authorize?: false)
-      |> Ash.update!()
+      |> Domain.primary_changeset(%{hostname: hostname})
+      |> Repo.update!()
 
     RedirectCache.flush()
     updated

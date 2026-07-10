@@ -1,20 +1,20 @@
 defmodule OrbitlyWeb.LinkStatsLive do
   @moduledoc """
   Click statistics for one link: daily counts (30 days), top referrers,
-  browser families. Access is authorized through Ash (owner/admin) before
-  any stats query runs.
+  browser families. Access is authorized through `Orbitly.Shortener`
+  (owner/admin) before any stats query runs.
   """
 
   use OrbitlyWeb, :live_view
 
   on_mount {OrbitlyWeb.LiveUserAuth, :live_user_required}
 
+  alias Orbitly.Shortener
   alias Orbitly.Shortener.ClickStats
-  alias Orbitly.Shortener.Link
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    case Ash.get(Link, id, actor: socket.assigns.current_user, load: [:domain]) do
+    case Shortener.get_link(id, socket.assigns.current_user) do
       {:ok, link} ->
         per_day = ClickStats.per_day(link.id)
 
