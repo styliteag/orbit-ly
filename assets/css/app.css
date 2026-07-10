@@ -2,7 +2,6 @@
    https://tailwindcss.com/docs/configuration */
 
 @import "tailwindcss" source(none);
-@source "../../deps/ash_authentication_phoenix";
 @import "phoenix-colocated/orbitly/colocated.css";
 @source "../css";
 @source "../js";
@@ -102,5 +101,10 @@
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* Copy-to-clipboard feedback: the phx:copy listener in app.js briefly adds
+   .copied to the button, swapping the clipboard icon for a check mark. */
+button.copied .copy-idle { display: none; }
+button.copied .copy-done { display: inline-block; }
 
 /* This file is for your main application CSS */

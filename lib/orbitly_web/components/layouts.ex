@@ -33,6 +33,10 @@ defmodule OrbitlyWeb.Layouts do
 
   attr :current_user, :map, default: nil, doc: "the signed-in user shown in the navbar"
 
+  attr :wide, :boolean,
+    default: false,
+    doc: "widens the content column for table-heavy pages"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -47,7 +51,7 @@ defmodule OrbitlyWeb.Layouts do
       <div class="flex-none flex items-center gap-2">
         <span
           id="app-version"
-          class="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-base-content/55"
+          class="hidden md:inline whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-base-content/55"
           title="Application version"
         >
           v{app_version()}
@@ -57,7 +61,7 @@ defmodule OrbitlyWeb.Layouts do
           href="https://github.com/styliteag/orbit-ly"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-ghost btn-sm"
+          class="btn btn-ghost btn-sm hidden lg:inline-flex"
         >
           github/styliteag/orbit-ly
         </.link>
@@ -87,7 +91,7 @@ defmodule OrbitlyWeb.Layouts do
     </header>
 
     <main class="px-4 py-10 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-4xl space-y-4">
+      <div class={["mx-auto space-y-4", (@wide && "max-w-6xl") || "max-w-4xl"]}>
         {render_slot(@inner_block)}
       </div>
     </main>
@@ -166,6 +170,7 @@ defmodule OrbitlyWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
+        aria-label="Use system theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -174,6 +179,7 @@ defmodule OrbitlyWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
+        aria-label="Use light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -182,6 +188,7 @@ defmodule OrbitlyWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
+        aria-label="Use dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>

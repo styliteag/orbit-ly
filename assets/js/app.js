@@ -37,9 +37,15 @@ topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
-// copy-to-clipboard for short links (dispatched via JS.dispatch from LiveViews)
+// copy-to-clipboard for short links (dispatched via JS.dispatch from LiveViews);
+// flips the button icon to a check mark for a moment (see .copied in app.css)
 window.addEventListener("phx:copy", event => {
-  navigator.clipboard.writeText(event.detail.text)
+  navigator.clipboard.writeText(event.detail.text).then(() => {
+    const button = event.target instanceof HTMLElement ? event.target.closest("button") : null
+    if (!button) return
+    button.classList.add("copied")
+    setTimeout(() => button.classList.remove("copied"), 1200)
+  })
 })
 
 // connect if there are any LiveViews on the page
