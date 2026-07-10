@@ -7,6 +7,8 @@
 # `Orbitly.Shortener.PrimaryDomain` at boot from :main_domain, not here. NOT for
 # production — production admins are created via the `bin/create_admin` task.
 if Application.get_env(:orbitly, :dev_routes) do
+  # Dev login credentials: sign in at /sign-in with this email + password.
+  # "orbitly-dev-password" is the password.
   admin_email = "admin@localhost"
   admin_password = "orbitly-dev-password"
 
