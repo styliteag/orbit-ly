@@ -61,14 +61,12 @@ and fill it in (the `.env` itself is gitignored):
 cp .env.example .env
 # set MAIN_DOMAIN, generate the secrets:
 echo "SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')" >> .env
-echo "TOKEN_SIGNING_SECRET=$(openssl rand -base64 48 | tr -d '\n')" >> .env
 ```
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
 | `DATABASE_PATH` | yes | — | SQLite file, set to `/data/orbitly.db` in the compose file |
 | `SECRET_KEY_BASE` | yes | — | cookie/session signature, ≥ 64 characters |
-| `TOKEN_SIGNING_SECRET` | yes | — | signature of the auth tokens |
 | `MAIN_DOMAIN` | yes | — | primary domain = dashboard host. Set as the primary domain's hostname at boot |
 | `PORT` | no | `4000` | HTTP port inside the container (Traefik points here) |
 | `POOL_SIZE` | no | `10` | DB connection pool |

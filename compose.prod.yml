@@ -24,8 +24,6 @@ services:
       DATABASE_PATH: /data/orbitly.db
       # `openssl rand -base64 64 | tr -d '\n'`  (>= 64 characters)
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set in .env}
-      # `openssl rand -base64 48 | tr -d '\n'`
-      TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?set in .env}
       # Primary domain = dashboard host, e.g. go.example.com. Synced as the
       # primary domain's hostname at boot; changing it moves the dashboard +
       # all links there to the new domain.
