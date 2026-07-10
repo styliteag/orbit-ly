@@ -8,11 +8,11 @@ Die Anwendung hat bereits eine gute Sicherheitsbasis: keine offene Registrierung
 
 Der Review identifizierte drei anonym ausnutzbare Availability-Probleme. Sie wurden am 2026-07-10 mit Regressionstests behoben:
 
-1. Der Redirect-Cache wächst bei neuen Host-/Slug-Misses ohne Obergrenze und entfernt abgelaufene Einträge nicht.
-2. Die Click-Tracking-Queue hat eine unbeschränkte Mailbox und persistiert jeden öffentlichen Treffer.
-3. Der ETS-Rate-Limiter prüft und erhöht Zähler nicht atomar; parallele Requests können das Limit überschreiten.
+1. Der Redirect-Cache wuchs bei neuen Host-/Slug-Misses ohne Obergrenze und entfernte abgelaufene Einträge nicht.
+2. Die Click-Tracking-Queue hatte eine unbeschränkte Mailbox und persistierte jeden öffentlichen Treffer.
+3. Der ETS-Rate-Limiter prüfte und erhöhte Zähler nicht atomar; parallele Requests konnten das Limit überschreiten.
 
-Passwort-Reset, Produktions-Mailer, Datenschutz, Container-CVEs und Release-Supply-Chain bleiben vor dem ersten öffentlichen Release zu härten.
+Passwort-Reset, Produktions-Mailer, Datenschutz und Release-Supply-Chain bleiben vor dem ersten öffentlichen Release zu härten.
 
 ## Scope und durchgeführte Prüfungen
 
@@ -23,7 +23,7 @@ Validierung:
 - `docker compose run --rm app mix precommit`: 166 Tests erfolgreich nach der Umsetzung von ORB-SEC-001 bis 003.
 - `docker compose run --rm app mix hex.audit`: keine zurückgezogenen Pakete oder bekannten Hex-Security-Advisories.
 - Produktions-Image lokal erfolgreich gebaut.
-- Docker Scout auf dem finalen Image: 117 Pakete; 1 Critical und 2 High Findings im enthaltenen Perl 5.40.1-6. Die Anwendung ruft Perl nicht auf, daher ist die unmittelbare Remote-Erreichbarkeit geringer als der Scanner-Score; das unnötige Paket sollte dennoch entfernt oder ersetzt werden.
+- Docker Scout nach dem Runtime-Hardening: 113 Pakete, 0 Critical, 0 High, 1 Medium, 23 Low und 3 nicht eingestufte Findings. Das verbliebene Medium-Finding betrifft `tar`, das die Anwendung nicht aufruft. Das Image wurde zusätzlich ohne Perl gestartet; Migrationen und die vollständige OTP-Anwendung liefen erfolgreich an.
 
 ## Hohe Priorität / Release-Blocker
 
@@ -101,11 +101,13 @@ Validierung:
 
 ### ORB-SEC-007: Finales Image enthält drei hoch bewertete Perl-CVEs
 
-**Beleg:** Docker Scout meldet für `perl 5.40.1-6` im finalen Debian-Trixie-Image `CVE-2026-12087` (Critical), `CVE-2026-48959` und `CVE-2026-48962` (High). Der Debian-Tracker führt Trixie derzeit als verwundbar. Perl ist im finalen Image unter `/usr/bin/perl` vorhanden, wird von Orbit-ly aber nicht aufgerufen.
+**Status:** Behoben am 2026-07-10. Die Runtime verwendet jetzt das eingebaute `C.UTF-8`, installiert das große `locales`-Paket nicht mehr und entfernt `perl-base` erst nach der vollständigen Konfiguration aller Runtime-Pakete und CA-Zertifikate. Das finale Image führt keine Paketverwaltung mehr aus. Ein Starttest der vollständigen Anwendung inklusive Migrationen war erfolgreich; die drei Perl-Findings sind verschwunden und Docker Scout meldet 0 Critical sowie 0 High Vulnerabilities.
+
+**Ursprünglicher Beleg:** Docker Scout meldete für `perl 5.40.1-6` im damaligen Debian-Trixie-Image `CVE-2026-12087` (Critical), `CVE-2026-48959` und `CVE-2026-48962` (High). Perl war unter `/usr/bin/perl` vorhanden, wurde von Orbit-ly aber nicht aufgerufen.
 
 **Bewertung:** Kein belegter anonymer Angriffspfad durch die Anwendung; die verwundbaren Perl-Funktionen benötigen Perl-Aufrufe mit speziell präparierten Daten. Trotzdem sollte unnötige Runtime-Software nicht mit ausgeliefert werden.
 
-**Empfehlung:** Prüfen, ob `locales`/`locale-gen` entfernt und `C.UTF-8` genutzt werden kann, damit Perl nicht in die Runtime gelangt. Danach Image neu scannen. Falls Perl zwingend bleibt, auf eine gefixte Debian-Version wechseln, sobald verfügbar, und bis dahin die Nicht-Erreichbarkeit dokumentieren.
+**Umsetzung:** `locales`/`locale-gen` wurden entfernt und durch `C.UTF-8` ersetzt. Weil Debian Slim weiterhin das essentielle `perl-base` mitbringt, wird es gezielt am Ende der Paketinstallation entfernt. Diese Reihenfolge erhält funktionierende CA-Zertifikate und OpenSSL, während die unveränderliche Runtime ohne apt/dpkg-Nutzung und ohne Perl ausgeliefert wird.
 
 ## Niedrige Priorität / Hardening
 
@@ -144,7 +146,7 @@ Validierung:
 5. SQLite-Volume und Backups verschlüsseln/schützen; Restore testen; Retention und Token-/Click-Löschung auch für Backups definieren.
 6. Starkes, einmaliges Admin-Passwort verwenden; den Beispielwert nie produktiv einsetzen. Für Admins mittelfristig MFA oder externes SSO erwägen.
 7. Speicher, BEAM-Mailboxen, 429-Raten, SQLite-Größe, Click-Drops, Mail-Fehler und 5xx alarmieren.
-8. Image nach dem Entfernen unnötiger Pakete erneut scannen; SBOM/Provenance beim Release aktivieren.
+8. Runtime-Image ist bereinigt und erneut ohne Critical-/High-Findings gescannt; SBOM/Provenance beim Release noch aktivieren.
 
 ## Referenzen
 

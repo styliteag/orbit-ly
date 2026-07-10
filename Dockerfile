@@ -78,17 +78,20 @@ RUN mix release
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
+# The release does not execute Perl. Debian marks perl-base as essential for
+# package-management scripts, so remove it only after all runtime packages and
+# CA certificates are configured; the immutable final image never runs apt/dpkg.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 ca-certificates \
+  && apt-get purge -y --allow-remove-essential perl-base \
   && rm -rf /var/lib/apt/lists/*
 
-# Set the locale
-RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
-  && locale-gen
-
-ENV LANG=en_US.UTF-8
-ENV LANGUAGE=en_US:en
-ENV LC_ALL=en_US.UTF-8
+# Debian provides C.UTF-8 without the `locales` package. Keeping the runtime on
+# this built-in UTF-8 locale avoids pulling Perl and other unused tooling into
+# the public image.
+ENV LANG=C.UTF-8
+ENV LANGUAGE=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 WORKDIR "/app"
 RUN chown nobody /app
