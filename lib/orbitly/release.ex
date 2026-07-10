@@ -54,19 +54,13 @@ defmodule Orbitly.Release do
   end
 
   @doc """
-  Imports links from a Kutt instance into orbit-ly (see `Orbitly.KuttImport`).
-  Reads KUTT_API_URL / KUTT_API_KEY and the optional KUTT_DOMAIN from the
+  Imports links from a Kutt instance into orbit-ly (see `Orbitly.KuttImport`),
+  reading KUTT_API_URL / KUTT_API_KEY and the optional KUTT_DOMAIN from the
   environment. All links are assigned to the current admin on the primary
   domain. Idempotent: existing slugs are skipped.
 
-  Dev (needs the seeded admin; the app boots and creates the primary domain):
-
-      docker compose run --rm \\
-        -e KUTT_API_URL=https://kutt.example.com \\
-        -e KUTT_API_KEY=your-api-key \\
-        app mix run -e "Orbitly.Release.import_kutt()"
-
-  Prod: `bin/orbitly eval "Orbitly.Release.import_kutt()"` with the same env vars.
+  This is the prod entry point (`bin/import_kutt`). In dev, prefer the arg-based
+  mix task `just import-kutt URL KEY [DOMAIN]` (→ `mix orbitly.import_kutt`).
   """
   def import_kutt do
     {:ok, _apps} = Application.ensure_all_started(@app)

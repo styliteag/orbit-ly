@@ -13,6 +13,16 @@ docker compose up
 Then: <http://localhost:4000>. Code reload works via the bind mount; deps, build
 artifacts and toolchain live in Docker volumes.
 
+`docker compose up` runs `mix setup`, which seeds a ready-to-use admin (dev
+only). Sign in at <http://localhost:4000/sign-in> with:
+
+- **Email:** `admin@localhost`
+- **Password:** `orbitly-dev-password`
+
+To import links from a Kutt instance in dev, see
+[§7 Import links from Kutt](#7-import-links-from-kutt-optional):
+`just import-kutt <URL> <KEY> [DOMAIN]`.
+
 Tests:
 
 ```sh
