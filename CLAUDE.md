@@ -60,6 +60,17 @@ docker compose run --rm app mix precommit   # before every commit
   `Orbitly.Accounts` (the context is unauthenticated by design).
 - Slug rules centralized in `Orbitly.Shortener.Slug`; reserved list in
   `config/config.exs` — extend it for every new UI route (ADR-0004).
+- **Three switchable UI designs** (`OrbitlyWeb.Design`: `orbit` default /
+  `bench` / `soft`): each is a daisyUI theme in `app.css`, server-rendered as
+  `data-theme` on `<html>` (no client theme script — the old light/dark
+  toggle is gone). Choice persists via `orbitly_design` cookie
+  (`PUT /design/:design`, `DesignController`) mirrored into the session by
+  the router's `fetch_design` plug; LiveViews read it on mount. The links
+  page swaps its whole layout per design (`LinksLive.Orbit|Bench|Soft`,
+  shared pieces in `LinksLive.Shared`) — event names and ids (`link-form`,
+  `search-form`, `advanced-options`, `edit-form`, `link-<id>`) are the
+  contract, keep them identical across designs. Fonts are self-hosted woff2
+  in `priv/static/fonts` (CSP `font-src 'self'` — never load font CDNs).
 - **The primary domain is env-driven (sentinel):** exactly one `is_primary` row,
   its hostname follows `MAIN_DOMAIN` (`:orbitly, :main_domain`). `MAIN_DOMAIN`
   is the ONE source for the dashboard host — also the endpoint `url` host (no

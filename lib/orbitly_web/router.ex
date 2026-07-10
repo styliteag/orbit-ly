@@ -12,6 +12,20 @@ defmodule OrbitlyWeb.Router do
     plug :put_secure_browser_headers
     plug OrbitlyWeb.Plugs.ContentSecurityPolicy
     plug :fetch_current_user
+    plug :fetch_design
+  end
+
+  # Reads the design cookie into an assign (root layout renders it as
+  # data-theme) and into the session (LiveViews read it on mount).
+  defp fetch_design(conn, _opts) do
+    design = OrbitlyWeb.Design.validate(conn.cookies["orbitly_design"])
+    conn = Plug.Conn.assign(conn, :design, design)
+
+    if Plug.Conn.get_session(conn, :design) == design do
+      conn
+    else
+      Plug.Conn.put_session(conn, :design, design)
+    end
   end
 
   # Per-IP throttle for credential submissions (sign-in, reset request).
@@ -25,6 +39,7 @@ defmodule OrbitlyWeb.Router do
     get "/", PageController, :home
     get "/qr/:id", QrController, :show
     delete "/sign-out", UserSessionController, :delete
+    put "/design/:design", DesignController, :update
 
     live_session :authenticated,
       on_mount: [{OrbitlyWeb.UserAuth, :mount_current_user}] do

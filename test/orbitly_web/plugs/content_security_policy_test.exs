@@ -22,11 +22,14 @@ defmodule OrbitlyWeb.Plugs.ContentSecurityPolicyTest do
     refute nonce.(conn) == nonce.(build_conn())
   end
 
-  test "the inline theme script carries the matching nonce", %{conn: conn} do
+  # The design/theme is server-rendered as a data-theme attribute (no inline
+  # script needed since the theme toggle became the design switcher). Any new
+  # inline script must carry nonce={assigns[:csp_nonce]} — see CLAUDE.md.
+  test "the root layout ships no inline script", %{conn: conn} do
     conn = get(conn, ~p"/sign-in")
-    [csp] = get_resp_header(conn, "content-security-policy")
-    [_, nonce] = Regex.run(~r/'nonce-([A-Za-z0-9_-]+)'/, csp)
+    html = html_response(conn, 200)
 
-    assert html_response(conn, 200) =~ ~s(nonce="#{nonce}")
+    assert html =~ ~s(data-theme="orbit")
+    refute html =~ ~r/<script(?![^>]*src=)[^>]*>/
   end
 end

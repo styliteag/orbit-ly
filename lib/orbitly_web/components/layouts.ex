@@ -86,7 +86,7 @@ defmodule OrbitlyWeb.Layouts do
             </ul>
           </div>
         <% end %>
-        <.theme_toggle />
+        <.design_switcher />
       </div>
     </header>
 
@@ -157,41 +157,24 @@ defmodule OrbitlyWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
+  Three-way design switcher (see `OrbitlyWeb.Design`). Each button does a
+  full-page PUT so the server re-renders with the chosen theme; the active
+  entry is highlighted purely via CSS against the root data-theme attribute
+  (`.design-switcher` rules in app.css), so no assign plumbing is needed.
   """
-  def theme_toggle(assigns) do
+  def design_switcher(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-        aria-label="Use system theme"
+    <div class="design-switcher join" title="Switch design">
+      <.link
+        :for={design <- OrbitlyWeb.Design.all()}
+        href={~p"/design/#{design}"}
+        method="put"
+        class="join-item btn btn-xs btn-ghost"
+        data-design-choice={design}
+        aria-label={"Use #{OrbitlyWeb.Design.name(design)} design"}
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-        aria-label="Use light theme"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-        aria-label="Use dark theme"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
+        {OrbitlyWeb.Design.name(design)}
+      </.link>
     </div>
     """
   end
