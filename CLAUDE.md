@@ -60,17 +60,27 @@ docker compose run --rm app mix precommit   # before every commit
   `Orbitly.Accounts` (the context is unauthenticated by design).
 - Slug rules centralized in `Orbitly.Shortener.Slug`; reserved list in
   `config/config.exs` — extend it for every new UI route (ADR-0004).
-- **Three switchable UI designs** (`OrbitlyWeb.Design`: `orbit` default /
-  `bench` / `soft`): each is a daisyUI theme in `app.css`, server-rendered as
-  `data-theme` on `<html>` (no client theme script — the old light/dark
-  toggle is gone). Choice persists via `orbitly_design` cookie
-  (`PUT /design/:design`, `DesignController`) mirrored into the session by
-  the router's `fetch_design` plug; LiveViews read it on mount. The links
-  page swaps its whole layout per design (`LinksLive.Orbit|Bench|Soft`,
-  shared pieces in `LinksLive.Shared`) — event names and ids (`link-form`,
-  `search-form`, `advanced-options`, `edit-form`, `link-<id>`) are the
-  contract, keep them identical across designs. Fonts are self-hosted woff2
-  in `priv/static/fonts` (CSP `font-src 'self'` — never load font CDNs).
+- **Three switchable UI designs × two modes** (`OrbitlyWeb.Design`:
+  `orbit` default / `bench` / `soft`, each `light`+`dark`): design and mode
+  combine into a daisyUI theme (`orbit-dark`, …) server-rendered as
+  `data-theme` on `<html>` (no client theme script). Choices persist via
+  `orbitly_design`/`orbitly_mode` cookies (`PUT /design/:design`,
+  `PUT /design-mode/:mode`, `DesignController`); the router's `fetch_design`
+  plug assigns `:design`+`:theme` and mirrors the design into the session,
+  where LiveViews read it on mount. Orbit is dark-first, Bench/Soft
+  light-first (`default_mode/1`). Everything sits in the navbar gear menu
+  (`Layouts.settings_menu`, active entries highlighted via CSS on
+  data-theme). The links page swaps its whole layout per design
+  (`LinksLive.Orbit|Bench|Soft`, shared pieces in `LinksLive.Shared`) —
+  event names and ids (`link-form`, `search-form`, `advanced-options`,
+  `edit-form`, `link-<id>`) are the contract; keep design layouts
+  mode-agnostic (semantic classes, no hardcoded `white/...`). Fonts are
+  self-hosted woff2 in `priv/static/fonts` (CSP `font-src 'self'` — never
+  load font CDNs).
+- **Self-service password change** at `/settings` (`UserSettingsLive`):
+  requires the current password, drops all tokens (log-out-everywhere) and
+  re-logs-in via phx-trigger-action `POST /session?_action=password-updated`.
+  Still no open registration and no self-service email change.
 - **The primary domain is env-driven (sentinel):** exactly one `is_primary` row,
   its hostname follows `MAIN_DOMAIN` (`:orbitly, :main_domain`). `MAIN_DOMAIN`
   is the ONE source for the dashboard host — also the endpoint `url` host (no

@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" data-theme={@conn.assigns[:design] || OrbitlyWeb.Design.default()}>
+<html
+  lang="en"
+  data-theme={@conn.assigns[:theme] || OrbitlyWeb.Design.theme(OrbitlyWeb.Design.default())}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

@@ -55,7 +55,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
               <.input
                 field={@form[:target_url]}
                 placeholder="Paste your long URL"
-                class="input input-lg w-full !rounded-full bg-base-200 border-white/10 pl-6 pr-16"
+                class="input input-lg w-full !rounded-full bg-base-200 border-base-content/15 pl-6 pr-16"
               />
               <button
                 type="submit"
@@ -74,7 +74,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
         <section class="space-y-4">
           <h2 class="brand-display text-lg font-semibold">Recent links</h2>
 
-          <div class="rounded-box bg-base-200/60 border border-white/5">
+          <div class="rounded-box bg-base-200/60 border border-base-content/10">
             <.list_controls
               search={@search}
               total={@total}
@@ -82,10 +82,10 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
               page={@page}
               max_page={@max_page}
               page_size={@page_size}
-              class="p-4 border-b border-white/5"
+              class="p-4 border-b border-base-content/10"
             />
 
-            <div class="divide-y divide-white/5">
+            <div class="divide-y divide-base-content/10">
               <p :if={@visible == []} class="p-10 text-center opacity-60">
                 {empty_text(@search)}
               </p>
@@ -93,7 +93,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
                 :for={link <- @visible}
                 id={"link-#{link.id}"}
                 data-link-row
-                class="px-5 py-3.5 hover:bg-white/[0.03] transition-colors"
+                class="px-5 py-3.5 hover:bg-base-content/[0.04] transition-colors"
               >
                 <div class="flex items-center gap-4">
                   <div class="min-w-0 flex-1">

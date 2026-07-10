@@ -29,7 +29,7 @@ defmodule OrbitlyWeb.Plugs.ContentSecurityPolicyTest do
     conn = get(conn, ~p"/sign-in")
     html = html_response(conn, 200)
 
-    assert html =~ ~s(data-theme="orbit")
+    assert html =~ ~s(data-theme="orbit-dark")
     refute html =~ ~r/<script(?![^>]*src=)[^>]*>/
   end
 end

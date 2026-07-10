@@ -11,16 +11,29 @@ defmodule OrbitlyWeb.DesignController do
 
   alias OrbitlyWeb.Design
 
-  @cookie "orbitly_design"
+  @design_cookie "orbitly_design"
+  @mode_cookie "orbitly_mode"
   @max_age 60 * 60 * 24 * 365
 
   def update(conn, %{"design" => design}) do
     design = Design.validate(design)
 
     conn
-    |> put_resp_cookie(@cookie, design, max_age: @max_age, same_site: "Lax")
+    |> put_resp_cookie(@design_cookie, design, max_age: @max_age, same_site: "Lax")
     |> put_session(:design, design)
     |> redirect(to: return_path(conn))
+  end
+
+  def update_mode(conn, %{"mode" => mode}) do
+    case Design.validate_mode(mode) do
+      nil ->
+        redirect(conn, to: return_path(conn))
+
+      mode ->
+        conn
+        |> put_resp_cookie(@mode_cookie, mode, max_age: @max_age, same_site: "Lax")
+        |> redirect(to: return_path(conn))
+    end
   end
 
   # Only follow local paths from the referer; anything else goes home.

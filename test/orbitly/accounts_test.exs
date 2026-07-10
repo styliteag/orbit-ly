@@ -122,6 +122,48 @@ defmodule Orbitly.AccountsTest do
     end
   end
 
+  describe "update_user_password/3" do
+    setup do
+      %{user: registered_user_fixture()}
+    end
+
+    test "updates the password and drops all tokens", %{user: user} do
+      token = Accounts.generate_user_session_token(user)
+
+      assert {:ok, updated} =
+               Accounts.update_user_password(user, default_password(), %{
+                 password: "brand-new-password",
+                 password_confirmation: "brand-new-password"
+               })
+
+      assert Accounts.get_user_by_email_and_password(updated.email, "brand-new-password")
+      refute Accounts.get_user_by_session_token(token)
+    end
+
+    test "rejects a wrong current password", %{user: user} do
+      assert {:error, changeset} =
+               Accounts.update_user_password(user, "wrong-current", %{
+                 password: "brand-new-password",
+                 password_confirmation: "brand-new-password"
+               })
+
+      assert %{current_password: ["is not valid"]} = errors_on(changeset)
+      assert Accounts.get_user_by_email_and_password(user.email, default_password())
+    end
+
+    test "validates the new password", %{user: user} do
+      assert {:error, changeset} =
+               Accounts.update_user_password(user, default_password(), %{
+                 password: "short",
+                 password_confirmation: "mismatch"
+               })
+
+      errors = errors_on(changeset)
+      assert "should be at least 8 byte(s)" in errors.password
+      assert "does not match password" in errors.password_confirmation
+    end
+  end
+
   describe "password reset" do
     test "reset resets the password and drops all sessions (log-out-everywhere)" do
       {:ok, user} =

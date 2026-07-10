@@ -18,13 +18,15 @@
   themes: false;
 }
 
-/* The three switchable designs (see OrbitlyWeb.Design): each is a daisyUI
-   theme selected server-side via data-theme on <html>. "orbit" is the
-   default; the links page additionally swaps its layout per design. */
+/* The three switchable designs (see OrbitlyWeb.Design), each in a dark and
+   a light mode: design + mode combine into the daisyUI theme selected
+   server-side via data-theme on <html> ("orbit-dark", "bench-light", …).
+   "orbit-dark" is the default; the links page additionally swaps its
+   layout per design. */
 
-/* Orbit (default) — deep space navy, warm gold sun accent, dark */
+/* Orbit (default) — deep space navy, warm gold sun accent */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "orbit";
+  name: "orbit-dark";
   default: true;
   prefersdark: true;
   color-scheme: "dark";
@@ -58,9 +60,45 @@
   --noise: 0;
 }
 
-/* Bench — ink on paper, stamp green, square corners, light */
+/* Orbit in daylight — cool paper, navy ink, darkened gold */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "bench";
+  name: "orbit-light";
+  default: false;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(97.5% 0.008 250);
+  --color-base-200: oklch(94% 0.012 250);
+  --color-base-300: oklch(89.5% 0.016 250);
+  --color-base-content: oklch(25% 0.04 262);
+  --color-primary: oklch(60% 0.13 85);
+  --color-primary-content: oklch(98% 0.02 85);
+  --color-secondary: oklch(48% 0.09 210);
+  --color-secondary-content: oklch(97% 0.013 210);
+  --color-accent: oklch(55% 0.15 300);
+  --color-accent-content: oklch(97% 0.016 300);
+  --color-neutral: oklch(35% 0.03 262);
+  --color-neutral-content: oklch(97% 0.01 250);
+  --color-info: oklch(55% 0.13 235);
+  --color-info-content: oklch(97% 0.01 235);
+  --color-success: oklch(55% 0.12 165);
+  --color-success-content: oklch(98% 0.01 165);
+  --color-warning: oklch(66% 0.15 80);
+  --color-warning-content: oklch(24% 0.06 80);
+  --color-error: oklch(56% 0.2 20);
+  --color-error-content: oklch(97% 0.014 20);
+  --radius-selector: 1rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Bench — ink on paper, stamp green, square corners */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "bench-light";
   default: false;
   prefersdark: false;
   color-scheme: "light";
@@ -94,9 +132,45 @@
   --noise: 0;
 }
 
-/* Soft — warm white, friendly blue + coral, pill shapes, light */
+/* Bench after dark — terminal: phosphor green on near-black */
 @plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "soft";
+  name: "bench-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: oklch(20% 0.006 160);
+  --color-base-200: oklch(16.5% 0.005 160);
+  --color-base-300: oklch(13% 0.004 160);
+  --color-base-content: oklch(90% 0.02 150);
+  --color-primary: oklch(75% 0.16 150);
+  --color-primary-content: oklch(18% 0.05 150);
+  --color-secondary: oklch(80% 0.01 260);
+  --color-secondary-content: oklch(18% 0.01 260);
+  --color-accent: oklch(75% 0.15 70);
+  --color-accent-content: oklch(20% 0.05 70);
+  --color-neutral: oklch(28% 0.008 160);
+  --color-neutral-content: oklch(90% 0.02 150);
+  --color-info: oklch(70% 0.12 235);
+  --color-info-content: oklch(20% 0.04 235);
+  --color-success: oklch(72% 0.14 155);
+  --color-success-content: oklch(18% 0.05 155);
+  --color-warning: oklch(78% 0.15 80);
+  --color-warning-content: oklch(24% 0.06 80);
+  --color-error: oklch(65% 0.19 25);
+  --color-error-content: oklch(97% 0.014 25);
+  --radius-selector: 0rem;
+  --radius-field: 0rem;
+  --radius-box: 0rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Soft — warm white, friendly blue + coral, pill shapes */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "soft-light";
   default: false;
   prefersdark: false;
   color-scheme: "light";
@@ -119,6 +193,42 @@
   --color-warning: oklch(75% 0.14 80);
   --color-warning-content: oklch(25% 0.05 80);
   --color-error: oklch(60% 0.2 20);
+  --color-error-content: oklch(97% 0.014 20);
+  --radius-selector: 2rem;
+  --radius-field: 1.5rem;
+  --radius-box: 1.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Soft at night — warm dark, brighter blue + coral, pill shapes */
+@plugin "daisyui/packages/bundle/daisyui-theme" {
+  name: "soft-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: "dark";
+  --color-base-100: oklch(25% 0.015 60);
+  --color-base-200: oklch(21% 0.013 60);
+  --color-base-300: oklch(17% 0.011 60);
+  --color-base-content: oklch(94% 0.01 85);
+  --color-primary: oklch(70% 0.15 262);
+  --color-primary-content: oklch(18% 0.04 262);
+  --color-secondary: oklch(72% 0.14 20);
+  --color-secondary-content: oklch(20% 0.05 20);
+  --color-accent: oklch(78% 0.1 160);
+  --color-accent-content: oklch(22% 0.05 160);
+  --color-neutral: oklch(32% 0.015 60);
+  --color-neutral-content: oklch(94% 0.01 85);
+  --color-info: oklch(70% 0.12 240);
+  --color-info-content: oklch(20% 0.04 240);
+  --color-success: oklch(72% 0.12 165);
+  --color-success-content: oklch(20% 0.05 165);
+  --color-warning: oklch(78% 0.13 80);
+  --color-warning-content: oklch(24% 0.05 80);
+  --color-error: oklch(66% 0.18 20);
   --color-error-content: oklch(97% 0.014 20);
   --radius-selector: 2rem;
   --radius-field: 1.5rem;
@@ -165,26 +275,29 @@
 }
 
 /* Per-design brand typography: .brand-display for display type,
-   .brand-mono for data. Neutral system stacks where a design has no
-   dedicated face. */
-[data-theme="orbit"] .brand-display {
+   .brand-mono for data. `|=` matches both modes ("orbit-dark"/"orbit-light").
+   Neutral system stacks where a design has no dedicated face. */
+[data-theme|="orbit"] .brand-display {
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 }
 
-[data-theme="soft"] .brand-display {
+[data-theme|="soft"] .brand-display {
   font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
 }
 
-[data-theme="bench"] .brand-mono {
+[data-theme|="bench"] .brand-mono {
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Design switcher (Layouts.design_switcher): highlight the active design
-   purely via the root data-theme attribute — no assigns needed. */
-[data-theme="orbit"] .design-switcher [data-design-choice="orbit"],
-[data-theme="bench"] .design-switcher [data-design-choice="bench"],
-[data-theme="soft"] .design-switcher [data-design-choice="soft"] {
+/* Settings gear menu (Layouts.settings_menu): highlight the active design
+   and mode purely via the root data-theme attribute — no assigns needed. */
+[data-theme|="orbit"] .design-menu [data-design-choice="orbit"],
+[data-theme|="bench"] .design-menu [data-design-choice="bench"],
+[data-theme|="soft"] .design-menu [data-design-choice="soft"],
+[data-theme$="-dark"] .design-menu [data-mode-choice="dark"],
+[data-theme$="-light"] .design-menu [data-mode-choice="light"] {
   background-color: var(--color-base-300);
+  font-weight: 600;
 }
 
 /* Add variants based on LiveView classes */

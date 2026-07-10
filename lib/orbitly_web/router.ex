@@ -15,11 +15,17 @@ defmodule OrbitlyWeb.Router do
     plug :fetch_design
   end
 
-  # Reads the design cookie into an assign (root layout renders it as
-  # data-theme) and into the session (LiveViews read it on mount).
+  # Reads the design/mode cookies into assigns (root layout renders the
+  # combined theme as data-theme) and mirrors the design into the session
+  # (LiveViews pick their layout on mount).
   defp fetch_design(conn, _opts) do
     design = OrbitlyWeb.Design.validate(conn.cookies["orbitly_design"])
-    conn = Plug.Conn.assign(conn, :design, design)
+    mode = OrbitlyWeb.Design.validate_mode(conn.cookies["orbitly_mode"])
+
+    conn =
+      conn
+      |> Plug.Conn.assign(:design, design)
+      |> Plug.Conn.assign(:theme, OrbitlyWeb.Design.theme(design, mode))
 
     if Plug.Conn.get_session(conn, :design) == design do
       conn
@@ -40,6 +46,7 @@ defmodule OrbitlyWeb.Router do
     get "/qr/:id", QrController, :show
     delete "/sign-out", UserSessionController, :delete
     put "/design/:design", DesignController, :update
+    put "/design-mode/:mode", DesignController, :update_mode
 
     live_session :authenticated,
       on_mount: [{OrbitlyWeb.UserAuth, :mount_current_user}] do
@@ -47,6 +54,7 @@ defmodule OrbitlyWeb.Router do
       # {OrbitlyWeb.UserAuth, :live_user_required | :live_admin_required}.
       live "/links", LinksLive, :index
       live "/links/:id/stats", LinkStatsLive, :show
+      live "/settings", UserSettingsLive, :edit
       live "/admin/domains", AdminDomainsLive, :index
       live "/admin/users", AdminUsersLive, :index
     end

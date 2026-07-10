@@ -15,8 +15,9 @@ config :orbitly,
 # UI routes on the primary domain. Comparison is case-insensitive.
 config :orbitly,
        :reserved_slugs,
-       ~w(admin api assets auth dev domains images links live login logout
-          password qr register reset settings sign-in sign-out stats unlock users)
+       ~w(admin api assets auth design design-mode dev domains fonts images links
+          live login logout password qr register reset settings sign-in sign-out
+          stats unlock users)
 
 # Primary domain (dashboard host = primary domain). Controls the hostname of the
 # sentinel primary domain that `Orbitly.Shortener.PrimaryDomain` synchronizes at

@@ -67,8 +67,6 @@ defmodule OrbitlyWeb.Layouts do
         </.link>
         <%= if @current_user do %>
           <.link navigate={~p"/links"} class="btn btn-ghost btn-sm">My links</.link>
-          <span class="text-sm opacity-60 hidden sm:inline px-2">{@current_user.email}</span>
-          <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">Log out</.link>
           <div :if={@current_user.admin} class="dropdown dropdown-end">
             <div
               tabindex="0"
@@ -86,7 +84,7 @@ defmodule OrbitlyWeb.Layouts do
             </ul>
           </div>
         <% end %>
-        <.design_switcher />
+        <.settings_menu current_user={@current_user} />
       </div>
     </header>
 
@@ -157,24 +155,62 @@ defmodule OrbitlyWeb.Layouts do
   end
 
   @doc """
-  Three-way design switcher (see `OrbitlyWeb.Design`). Each button does a
-  full-page PUT so the server re-renders with the chosen theme; the active
-  entry is highlighted purely via CSS against the root data-theme attribute
-  (`.design-switcher` rules in app.css), so no assign plumbing is needed.
+  Settings gear menu: design and light/dark mode for everyone, account
+  entries (change password, log out) when signed in. Design/mode buttons do
+  a full-page PUT so the server re-renders with the chosen theme; the
+  active entries are highlighted purely via CSS against the root data-theme
+  attribute (`.design-menu` rules in app.css), so no assign plumbing is
+  needed on other pages.
   """
-  def design_switcher(assigns) do
+  attr :current_user, :map, default: nil
+
+  def settings_menu(assigns) do
     ~H"""
-    <div class="design-switcher join" title="Switch design">
-      <.link
-        :for={design <- OrbitlyWeb.Design.all()}
-        href={~p"/design/#{design}"}
-        method="put"
-        class="join-item btn btn-xs btn-ghost"
-        data-design-choice={design}
-        aria-label={"Use #{OrbitlyWeb.Design.name(design)} design"}
+    <div class="dropdown dropdown-end">
+      <div
+        tabindex="0"
+        role="button"
+        class="btn btn-ghost btn-sm btn-circle"
+        title="Settings"
+        aria-label="Settings"
       >
-        {OrbitlyWeb.Design.name(design)}
-      </.link>
+        <.icon name="hero-cog-6-tooth" class="w-5 h-5" />
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu design-menu bg-base-100 rounded-box z-10 mt-2 w-56 p-2 shadow-lg border border-base-200"
+      >
+        <li :if={@current_user} class="menu-title truncate">{@current_user.email}</li>
+        <li class="menu-title">Design</li>
+        <li :for={design <- OrbitlyWeb.Design.all()}>
+          <.link href={~p"/design/#{design}"} method="put" data-design-choice={design}>
+            {OrbitlyWeb.Design.name(design)}
+          </.link>
+        </li>
+        <li class="menu-title">Mode</li>
+        <li :for={mode <- OrbitlyWeb.Design.modes()}>
+          <.link href={~p"/design-mode/#{mode}"} method="put" data-mode-choice={mode}>
+            <.icon
+              name={if mode == "dark", do: "hero-moon-micro", else: "hero-sun-micro"}
+              class="size-4"
+            />
+            {OrbitlyWeb.Design.mode_name(mode)}
+          </.link>
+        </li>
+        <%= if @current_user do %>
+          <li class="menu-title">Account</li>
+          <li>
+            <.link navigate={~p"/settings"}>
+              <.icon name="hero-key" class="size-4" /> Change password
+            </.link>
+          </li>
+          <li>
+            <.link href={~p"/sign-out"} method="delete">
+              <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
+            </.link>
+          </li>
+        <% end %>
+      </ul>
     </div>
     """
   end

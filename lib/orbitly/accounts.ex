@@ -112,4 +112,24 @@ defmodule Orbitly.Accounts do
   def change_user_password(user, attrs \\ %{}) do
     User.password_changeset(user, attrs, hash_password: false)
   end
+
+  @doc """
+  Self-service password change: requires the current password, then updates
+  the hash and, per log-out-everywhere, drops all of the user's tokens.
+  """
+  def update_user_password(user, current_password, attrs) do
+    changeset =
+      user
+      |> User.password_changeset(attrs)
+      |> User.validate_current_password(current_password)
+
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:user, changeset)
+    |> Ecto.Multi.delete_all(:tokens, UserToken.by_user_and_contexts_query(user, :all))
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{user: user}} -> {:ok, user}
+      {:error, :user, changeset, _} -> {:error, changeset}
+    end
+  end
 end

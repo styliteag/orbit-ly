@@ -16,6 +16,7 @@ defmodule Orbitly.Accounts.User do
     field :email, :string
     field :hashed_password, :string, redact: true
     field :password, :string, virtual: true, redact: true
+    field :current_password, :string, virtual: true, redact: true
     field :confirmed_at, :utc_datetime_usec
     field :admin, :boolean, default: false
   end
@@ -68,6 +69,17 @@ defmodule Orbitly.Accounts.User do
       |> delete_change(:password)
     else
       changeset
+    end
+  end
+
+  @doc "Requires the user's current password (self-service password change)."
+  def validate_current_password(changeset, password) do
+    changeset = cast(changeset, %{current_password: password}, [:current_password])
+
+    if valid_password?(changeset.data, password) do
+      changeset
+    else
+      add_error(changeset, :current_password, "is not valid")
     end
   end
 
