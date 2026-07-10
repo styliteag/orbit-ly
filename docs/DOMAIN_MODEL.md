@@ -41,15 +41,15 @@ erDiagram
 3. Exactly one domain is the primary domain; only it serves the dashboard. Its
    hostname follows the `MAIN_DOMAIN` configuration and is synced at boot
    (sentinel row: stable id, links are preserved).
-4. A link belongs to exactly one user (`owner_id`, Ash attribute multitenancy).
-5. Users see/change only their own links; the instance admin sees everything (Ash policies).
+4. A link belongs to exactly one user (`owner_id`).
+5. Users see/change only their own links; the instance admin sees everything (context scoping in `Orbitly.Shortener`).
 6. Expired link (`expires_at < now`): the redirect responds 410, the link stays visible to its owner.
 7. Unknown host or unknown slug: 404.
 8. Click events older than 12 months are deleted daily.
 
 ## Flows
 
-### Redirect (hot path, without Ash)
+### Redirect (hot path)
 
 1. Request hits the app (proxy has terminated TLS, `x-forwarded-*` set).
 2. Plug in the endpoint: check host against the domain list (cache) → unknown: 404.
@@ -58,7 +58,7 @@ erDiagram
 5. Expired → 410. Password-protected → interstitial with a password form.
 6. Otherwise: 302 redirect to the target URL; click event into a buffer (batch insert, asynchronous).
 
-### Create a link (via Ash)
+### Create a link
 
 1. The user picks a domain (from the admin list), a slug (custom or generated),
    a target URL, optionally an expiry date/password.
