@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Production password-reset emails are now sent over authenticated SMTP
+  (Swoosh + `gen_smtp`). Relay, credentials, sender, and port are configured at
+  runtime via `SMTP_RELAY`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `MAIL_FROM`, and
+  optional `MAIL_FROM_NAME`/`SMTP_PORT`; the release aborts at boot when
+  required values are missing. STARTTLS is enforced and the relay certificate
+  is verified.
+
+### Security
+
+- Password-reset delivery results are now handled: a successful delivery keeps
+  exactly one active reset token per user, while a failed delivery or adapter
+  exception removes the newly created token so a previously delivered one stays
+  valid. The public response stays generic. (ORB-SEC-004/005)
+- Hardened the public redirect hot path against anonymous resource exhaustion:
+  the click buffer caps admission and truncates oversized IP/user-agent/referrer
+  values, the rate limiter serializes decisions (no more racing past the limit)
+  and sweeps entries by their actual window expiry, and the redirect cache
+  enforces a hard entry bound with active TTL sweeping. (ORB-SEC-001/002/003)
+- Removed Perl from the production runtime image.
+
 ## [0.1.8] - 2026-07-10
 
 ## [0.1.7] - 2026-07-10
