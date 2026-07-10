@@ -1,8 +1,10 @@
 # CLAUDE.md — Stylite Orbit-ly
 
-Multi-tenant link shortener (Phoenix + Ash + AshSqlite). Framework conventions
-(Elixir/Phoenix/LiveView/Ash idioms) live in **AGENTS.md** — here only the
-project delta.
+Multi-tenant link shortener (Phoenix + Ash + Ecto on SQLite). **Ash is used
+only for Accounts (User/Token/auth); the Shortener domain (Domain/Link/
+ClickEvent) is plain Ecto** behind the `Orbitly.Shortener` context. Framework
+conventions (Elixir/Phoenix/LiveView/Ash idioms) live in **AGENTS.md** — here
+only the project delta.
 
 ## Sources of truth
 
@@ -20,7 +22,7 @@ Mix NEVER runs on the host. Everything via Docker:
 ```sh
 just dev          # server, http://localhost:4000
 just test [ARGS]  # mix test in the container
-just codegen NAME # mix ash.codegen after EVERY resource change
+just codegen NAME # mix ash.codegen — only for Ash (Accounts) resource changes
 just fmt | iex | sh | migrate | setup
 docker compose run --rm app mix precommit   # before every commit
 ```
@@ -38,13 +40,16 @@ docker compose run --rm app mix precommit   # before every commit
 
 - **Redirect hot path NEVER goes through Ash** (ADR-0001): `OrbitlyWeb.Redirector`
   (plug in the endpoint before the router) + `RedirectCache` (ETS, read-through
-  in the caller process, 60s TTL). Invalidation: the `CacheInvalidator` notifier
-  fully flushes on every domain/link mutation.
+  in the caller process, 60s TTL; plain Ecto queries). Invalidation: the
+  `Orbitly.Shortener` context flushes `RedirectCache` directly on every
+  domain/link mutation (the old `CacheInvalidator` Ash notifier is gone).
 - **Click events are NEVER written one by one**: only via `ClickBuffer`
   (batch `insert_all`), otherwise SQLite's single writer blocks the hot path.
-- **Always pass the actor through**: ownership/admin runs through policies
-  (`relates_to_actor_via(:owner)`, `admin` flag). `authorize?: false` is only
-  legitimate in the hot path, in seeds and in fixtures.
+- **Shortener authorization is explicit context scoping, not Ash policies**:
+  callers pass the acting user; `Orbitly.Shortener` enforces owner/admin via
+  `can_access_link?`, `scope_links`, `admin?`, and forces `owner_id` on create
+  (never mass-assignable). Accounts still runs on Ash policies. Data access in
+  the hot path, seeds and fixtures bypasses authorization by design.
 - Slug rules centralized in `Orbitly.Shortener.Slug`; reserved list in
   `config/config.exs` — extend it for every new UI route (ADR-0004).
 - **The primary domain is env-driven (sentinel):** exactly one `is_primary` row,
@@ -53,23 +58,27 @@ docker compose run --rm app mix precommit   # before every commit
   more `PHX_HOST`). `Orbitly.Shortener.PrimaryDomain` (supervisor child before
   the endpoint) creates it at boot or renames it in place; links are anchored to
   the row id and move with it. Off in tests (`ensure_primary_domain: false`) —
-  there fixtures own the domains. The primary row is protected against deletion/
-  deactivation (`Changes.ProtectPrimary`); `is_primary` is NOT in the `:create`
-  accept — no more admin `make_primary`.
+  there fixtures own the domains. The primary row is protected against deletion
+  (`Shortener.delete_domain` refuses it) and deactivation
+  (`Domain.update_changeset`); `is_primary` is set only via
+  `Domain.primary_changeset` (used by `PrimaryDomain`), never through the admin
+  create/update changesets — no admin `make_primary`.
 
-## AshSqlite pitfalls
+## AshSqlite pitfalls (Accounts only — Shortener is plain Ecto)
 
-- **No count aggregates** (`AggregatesNotSupported`) — use an Ecto group query
-  instead, see `Shortener.click_counts/1`.
+- **No count aggregates** (`AggregatesNotSupported`) on Ash resources — use an
+  Ecto group query instead (Shortener already does: `ClickStats`,
+  `Shortener.click_counts/1`).
 - Transient "database is locked" during parallel setup seen already; if it shows
   up in production: set `busy_timeout` in the repo config.
 
 ## Tests
 
-- Fixtures: `Orbitly.Fixtures`. `user_fixture`/`domain_fixture`/`link_fixture` =
-  `Ash.Seed` (bypasses policies, arbitrary state). For logged-in conn/LiveView
-  tests ALWAYS use `registered_user_fixture` + `log_in/2` (real token metadata,
-  `store_in_session` needs it).
+- Fixtures: `Orbitly.Fixtures`. `user_fixture` = `Ash.Seed`; `domain_fixture`/
+  `link_fixture` = `Repo.insert!` of a struct (both bypass validation for
+  arbitrary state). For logged-in conn/LiveView tests ALWAYS use
+  `registered_user_fixture` + `log_in/2` (real token metadata, `store_in_session`
+  needs it).
 - DB and GenServer tests `async: false` (shared sandbox; SQLite).
 - Tests that trigger redirects leave events in the `ClickBuffer` — keep the setup
   pattern with `on_exit(fn -> ClickBuffer.flush_now() end)`, otherwise FK-error
