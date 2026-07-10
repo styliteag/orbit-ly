@@ -47,7 +47,7 @@ defmodule Orbitly.Accounts.User do
     |> validate_length(:email, max: 160)
     |> update_change(:email, &String.downcase(String.trim(&1)))
     |> unsafe_validate_unique(:email, Orbitly.Repo)
-    |> unique_constraint(:email, name: "users_unique_email_index")
+    |> unique_constraint(:email)
   end
 
   defp validate_password(changeset, opts) do
