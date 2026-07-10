@@ -1,7 +1,5 @@
-# Seeds. Runs via `mix ash.setup` (aliased in mix.exs) in every environment,
-# therefore everything below must be idempotent and dev-only where noted.
-
-require Ash.Query
+# Seeds. Runs via `mix ecto.setup` in every environment, therefore everything
+# below must be idempotent and dev-only where noted.
 
 # Dev only (dev_routes is set exclusively in config/dev.exs): a ready-to-use
 # admin account, so `docker compose up` gives a working instance without manual
@@ -12,15 +10,11 @@ if Application.get_env(:orbitly, :dev_routes) do
   admin_email = "admin@localhost"
   admin_password = "orbitly-dev-password"
 
-  unless Orbitly.Accounts.User
-         |> Ash.Query.filter(email == ^admin_email)
-         |> Ash.exists?(authorize?: false) do
-    Ash.Seed.seed!(Orbitly.Accounts.User, %{
-      email: admin_email,
-      hashed_password: Bcrypt.hash_pwd_salt(admin_password),
-      confirmed_at: DateTime.utc_now(),
-      admin: true
-    })
+  unless Orbitly.Accounts.get_user_by_email(admin_email) do
+    {:ok, user} =
+      Orbitly.Accounts.admin_create_user(%{email: admin_email, password: admin_password})
+
+    {:ok, _} = Orbitly.Accounts.set_admin(user, true)
 
     IO.puts("Seeded dev admin: #{admin_email} / #{admin_password}")
   end

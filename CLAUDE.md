@@ -1,10 +1,10 @@
 # CLAUDE.md — Stylite Orbit-ly
 
-Multi-tenant link shortener (Phoenix + Ash + Ecto on SQLite). **Ash is used
-only for Accounts (User/Token/auth); the Shortener domain (Domain/Link/
-ClickEvent) is plain Ecto** behind the `Orbitly.Shortener` context. Framework
-conventions (Elixir/Phoenix/LiveView/Ash idioms) live in **AGENTS.md** — here
-only the project delta.
+Multi-tenant link shortener (Phoenix + Ecto on SQLite — **plain, no Ash**). Two
+contexts: `Orbitly.Shortener` (domains, links, click events) and
+`Orbitly.Accounts` (users + session-based auth). Framework conventions
+(Elixir/Phoenix/LiveView idioms) live in **AGENTS.md** — here only the project
+delta.
 
 ## Sources of truth
 
@@ -20,36 +20,44 @@ only the project delta.
 Mix NEVER runs on the host. Everything via Docker:
 
 ```sh
-just dev          # server, http://localhost:4000
-just test [ARGS]  # mix test in the container
-just codegen NAME # mix ash.codegen — only for Ash (Accounts) resource changes
+just dev              # server, http://localhost:4000
+just test [ARGS]      # mix test in the container
+just gen-migration N  # mix ecto.gen.migration — schema changes are plain Ecto
 just fmt | iex | sh | migrate | setup
 docker compose run --rm app mix precommit   # before every commit
 ```
 
 - Dev image = `Dockerfile.dev` (elixir:1.20 + cmake for lazy_html + inotify-tools).
 - `./data/` = caches (deps/_build/toolchain), gitignored; `just clean` deletes them.
-- Migrations/snapshots land correctly in `priv/` on the host, even when the
-  codegen log shows `_build/...` paths.
-- After `just codegen`/`just migrate` with the dev server running:
-  `docker compose restart app` — the server checks codegen status against its
-  stale `_build` copy of `priv` and otherwise responds with 500.
+- Migrations land in `priv/repo/migrations/` on the host. After `just migrate`
+  with the dev server running: `docker compose restart app` — the server holds
+  the SQLite file open against its stale `_build` copy of `priv` and otherwise
+  shows the pending-migration error page (`Phoenix.Ecto.CheckRepoStatus`).
 - Dev login (seeds, dev only): `admin@localhost` / `orbitly-dev-password`.
 
 ## Architecture cornerstones
 
-- **Redirect hot path NEVER goes through Ash** (ADR-0001): `OrbitlyWeb.Redirector`
-  (plug in the endpoint before the router) + `RedirectCache` (ETS, read-through
-  in the caller process, 60s TTL; plain Ecto queries). Invalidation: the
-  `Orbitly.Shortener` context flushes `RedirectCache` directly on every
-  domain/link mutation (the old `CacheInvalidator` Ash notifier is gone).
+- **Redirect hot path NEVER goes through the context** (ADR-0001):
+  `OrbitlyWeb.Redirector` (plug in the endpoint before the router) +
+  `RedirectCache` (ETS, read-through in the caller process, 60s TTL; plain Ecto
+  queries). Invalidation: the `Orbitly.Shortener` context flushes `RedirectCache`
+  directly on every domain/link mutation.
 - **Click events are NEVER written one by one**: only via `ClickBuffer`
   (batch `insert_all`), otherwise SQLite's single writer blocks the hot path.
-- **Shortener authorization is explicit context scoping, not Ash policies**:
-  callers pass the acting user; `Orbitly.Shortener` enforces owner/admin via
-  `can_access_link?`, `scope_links`, `admin?`, and forces `owner_id` on create
-  (never mass-assignable). Accounts still runs on Ash policies. Data access in
-  the hot path, seeds and fixtures bypasses authorization by design.
+  Stats are plain Ecto group-by queries (`ClickStats`, `Shortener.click_counts/1`).
+- **Shortener authorization is explicit context scoping**: callers pass the
+  acting user; `Orbitly.Shortener` enforces owner/admin via `can_access_link?`,
+  `scope_links`, `admin?`, and forces `owner_id` on create (never
+  mass-assignable). Data access in the hot path, seeds and fixtures bypasses
+  authorization by design.
+- **Auth is plain Phoenix session auth** (phx.gen.auth model, `OrbitlyWeb.UserAuth`):
+  opaque session tokens in `users_tokens`, Bcrypt passwords, reset tokens stored
+  SHA-256-hashed. `fetch_current_user` plug + `on_mount` hooks
+  (`:mount_current_user`, `:live_user_required`, `:live_admin_required`,
+  `:live_no_user`). Login = `POST /session` (`UserSessionController`), logout =
+  `DELETE /sign-out`, reset LiveViews at `/reset` and `/password-reset/:token`.
+  App authorization lives at the router (admin routes) + on_mount, NOT in
+  `Orbitly.Accounts` (the context is unauthenticated by design).
 - Slug rules centralized in `Orbitly.Shortener.Slug`; reserved list in
   `config/config.exs` — extend it for every new UI route (ADR-0004).
 - **The primary domain is env-driven (sentinel):** exactly one `is_primary` row,
@@ -64,21 +72,20 @@ docker compose run --rm app mix precommit   # before every commit
   `Domain.primary_changeset` (used by `PrimaryDomain`), never through the admin
   create/update changesets — no admin `make_primary`.
 
-## AshSqlite pitfalls (Accounts only — Shortener is plain Ecto)
+## SQLite
 
-- **No count aggregates** (`AggregatesNotSupported`) on Ash resources — use an
-  Ecto group query instead (Shortener already does: `ClickStats`,
-  `Shortener.click_counts/1`).
 - Transient "database is locked" during parallel setup seen already; if it shows
-  up in production: set `busy_timeout` in the repo config.
+  up in production, set `busy_timeout` in the repo config.
+- UUID primary keys are stored as 36-char TEXT — Ecto schemas use `Ecto.UUID`.
+  Email lookups are case-insensitive via an explicit `collate nocase` fragment.
 
 ## Tests
 
-- Fixtures: `Orbitly.Fixtures`. `user_fixture` = `Ash.Seed`; `domain_fixture`/
-  `link_fixture` = `Repo.insert!` of a struct (both bypass validation for
-  arbitrary state). For logged-in conn/LiveView tests ALWAYS use
-  `registered_user_fixture` + `log_in/2` (real token metadata, `store_in_session`
-  needs it).
+- Fixtures: `Orbitly.Fixtures`. `user_fixture`/`domain_fixture`/`link_fixture` =
+  `Repo.insert!` of a struct (bypass validation for arbitrary state; `user_fixture`
+  gets a fake password hash). For logged-in conn/LiveView tests use
+  `registered_user_fixture` (real Bcrypt hash) + `log_in/2` (mints a real session
+  token and stores it in the session).
 - DB and GenServer tests `async: false` (shared sandbox; SQLite).
 - Tests that trigger redirects leave events in the `ClickBuffer` — keep the setup
   pattern with `on_exit(fn -> ClickBuffer.flush_now() end)`, otherwise FK-error
@@ -88,13 +95,14 @@ docker compose run --rm app mix precommit   # before every commit
 
 ## Known open points (don't forget)
 
-- Registration is hard-disabled (`RegistrationDisabled` validation) — do NOT
-  accidentally remove it when touching the auth strategy.
+- No open registration (ADR-0006): there is deliberately no register route and no
+  `Accounts` self-signup function — accounts are admin-created only. Do NOT add
+  one when touching auth.
 - ALWAYS determine the client IP via `OrbitlyWeb.ClientIP.get/1`, never take the
   first `x-forwarded-for` entry (spoofable). Prod reads the IP only from XFF;
   `:trusted_proxy_hops` (env `TRUSTED_PROXY_HOPS`, default 1) must match the
   number of reverse proxies, otherwise rate limiting acts on the wrong value.
-- Auth POSTs (`/auth/*`) are throttled by the `AuthRateLimit` plug (10/min/IP).
+- The `POST /session` sign-in is throttled by the `AuthRateLimit` plug (10/min/IP).
 - CSP: strict Content-Security-Policy via the `ContentSecurityPolicy` plug, off
   in dev (`csp_enabled: false`, otherwise LiveReload breaks). Inline scripts need
   `nonce={assigns[:csp_nonce]}` — new inline scripts are blocked otherwise.

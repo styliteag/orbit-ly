@@ -12,7 +12,7 @@ defmodule OrbitlyWeb.AuthRateLimitTest do
     submit = fn ->
       build_conn()
       |> Map.put(:remote_ip, {203, 0, 113, 90})
-      |> post("/auth/user/password/sign_in", %{
+      |> post("/session", %{
         "user" => %{"email" => "nobody@example.com", "password" => "wrong"}
       })
     end
@@ -37,7 +37,7 @@ defmodule OrbitlyWeb.AuthRateLimitTest do
       build_conn()
       |> Map.put(:remote_ip, {10, 0, 0, 1})
       |> put_req_header("x-forwarded-for", "1.2.3.#{i}, 198.51.100.42")
-      |> post("/auth/user/password/sign_in", %{
+      |> post("/session", %{
         "user" => %{"email" => "nobody@example.com", "password" => "wrong"}
       })
     end

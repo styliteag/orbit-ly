@@ -64,7 +64,7 @@ defmodule OrbitlyWeb.Layouts do
         <%= if @current_user do %>
           <.link navigate={~p"/links"} class="btn btn-ghost btn-sm">My links</.link>
           <span class="text-sm opacity-60 hidden sm:inline px-2">{@current_user.email}</span>
-          <.link href={~p"/sign-out"} class="btn btn-ghost btn-sm">Log out</.link>
+          <.link href={~p"/sign-out"} method="delete" class="btn btn-ghost btn-sm">Log out</.link>
           <div :if={@current_user.admin} class="dropdown dropdown-end">
             <div
               tabindex="0"

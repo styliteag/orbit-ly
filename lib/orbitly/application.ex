@@ -25,8 +25,7 @@ defmodule Orbitly.Application do
       # change. Runs after migrations/RedirectCache, before the endpoint.
       Orbitly.Shortener.PrimaryDomain,
       # Start to serve requests, typically the last entry
-      OrbitlyWeb.Endpoint,
-      {AshAuthentication.Supervisor, [otp_app: :orbitly]}
+      OrbitlyWeb.Endpoint
     ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

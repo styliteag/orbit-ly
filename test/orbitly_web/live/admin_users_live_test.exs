@@ -30,7 +30,7 @@ defmodule OrbitlyWeb.AdminUsersLiveTest do
     |> element(~s{[phx-click="toggle-admin"][phx-value-id="#{victim.id}"]})
     |> render_click()
 
-    {:ok, users} = Orbitly.Accounts.list_users(actor: admin)
+    users = Orbitly.Accounts.list_users()
     assert Enum.find(users, &(&1.id == victim.id)).admin
 
     view

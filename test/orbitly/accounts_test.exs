@@ -6,94 +6,162 @@ defmodule Orbitly.AccountsTest do
   alias Orbitly.Accounts
   alias Orbitly.Accounts.User
 
-  setup do
-    %{admin: admin_fixture(), user: user_fixture()}
-  end
-
-  describe "admin_create" do
-    test "admin creates a confirmed account that can sign in", %{admin: admin} do
+  describe "admin_create_user/1" do
+    test "creates a confirmed, non-admin account with a downcased email" do
       assert {:ok, user} =
-               Accounts.admin_create_user(
-                 %{email: "new@example.com", password: "initial-password"},
-                 actor: admin
-               )
+               Accounts.admin_create_user(%{
+                 email: "New@Example.com",
+                 password: "initial-password"
+               })
 
-      assert to_string(user.email) == "new@example.com"
+      assert user.email == "new@example.com"
       refute user.admin
       assert user.confirmed_at
-
-      assert {:ok, %User{}} =
-               User
-               |> Ash.Query.for_read(
-                 :sign_in_with_password,
-                 %{email: "new@example.com", password: "initial-password"},
-                 authorize?: false
-               )
-               |> Ash.read_one()
+      assert is_binary(user.hashed_password)
     end
 
-    test "non-admins are forbidden", %{user: user} do
-      assert {:error, %Ash.Error.Forbidden{}} =
-               Accounts.admin_create_user(
-                 %{email: "x@example.com", password: "some-password"},
-                 actor: user
-               )
+    test "rejects a short password" do
+      assert {:error, changeset} =
+               Accounts.admin_create_user(%{email: "x@example.com", password: "short"})
+
+      assert "should be at least 8 byte(s)" in errors_on(changeset).password
     end
-  end
 
-  describe "open registration (ADR-0006)" do
-    test "register_with_password always fails, even unauthenticated" do
-      assert {:error, %Ash.Error.Invalid{} = error} =
-               User
-               |> Ash.Changeset.for_create(
-                 :register_with_password,
-                 %{
-                   email: "intruder@example.com",
-                   password: "password123",
-                   password_confirmation: "password123"
-                 },
-                 authorize?: false
-               )
-               |> Ash.create()
+    test "rejects an invalid email" do
+      assert {:error, changeset} =
+               Accounts.admin_create_user(%{email: "not-an-email", password: "initial-password"})
 
-      assert Exception.message(error) =~ "registration is disabled"
+      refute Enum.empty?(errors_on(changeset).email)
+    end
+
+    test "rejects a duplicate email case-insensitively" do
+      {:ok, _} =
+        Accounts.admin_create_user(%{email: "dup@example.com", password: "initial-password"})
+
+      assert {:error, changeset} =
+               Accounts.admin_create_user(%{
+                 email: "DUP@example.com",
+                 password: "initial-password"
+               })
+
+      assert "has already been taken" in errors_on(changeset).email
     end
   end
 
-  describe "set_admin / destroy" do
-    test "admin grants and revokes the admin flag", %{admin: admin, user: user} do
-      assert {:ok, promoted} = Accounts.set_admin(user, %{admin: true}, actor: admin)
+  describe "get_user_by_email_and_password/2" do
+    setup do
+      {:ok, user} =
+        Accounts.admin_create_user(%{email: "auth@example.com", password: "the-password"})
+
+      %{user: user}
+    end
+
+    test "returns the user for valid, case-insensitive credentials", %{user: user} do
+      assert %User{id: id} =
+               Accounts.get_user_by_email_and_password("Auth@Example.com", "the-password")
+
+      assert id == user.id
+    end
+
+    test "returns nil for a wrong password" do
+      refute Accounts.get_user_by_email_and_password("auth@example.com", "wrong")
+    end
+
+    test "returns nil for an unknown email" do
+      refute Accounts.get_user_by_email_and_password("nobody@example.com", "the-password")
+    end
+  end
+
+  describe "set_admin/2 and delete_user/1" do
+    test "grants and revokes the admin flag" do
+      user = user_fixture()
+
+      assert {:ok, promoted} = Accounts.set_admin(user, true)
       assert promoted.admin
 
-      assert {:ok, demoted} = Accounts.set_admin(promoted, %{admin: false}, actor: admin)
+      assert {:ok, demoted} = Accounts.set_admin(promoted, false)
       refute demoted.admin
     end
 
-    test "non-admins may neither promote nor delete", %{user: user} do
-      other = user_fixture()
-
-      assert {:error, %Ash.Error.Forbidden{}} =
-               Accounts.set_admin(other, %{admin: true}, actor: user)
-
-      assert {:error, %Ash.Error.Forbidden{}} = Accounts.destroy_user(other, actor: user)
-    end
-
-    test "admin deletes a user together with their links", %{admin: admin, user: user} do
+    test "deleting a user cascades to their links" do
+      admin = admin_fixture()
+      user = user_fixture()
       domain = domain_fixture()
       link_fixture(user, domain)
 
-      assert :ok = Accounts.destroy_user(user, actor: admin)
+      assert {:ok, _} = Accounts.delete_user(user)
       assert [] = Orbitly.Shortener.list_links(admin)
     end
   end
 
-  describe "read policies" do
-    test "admins list all users, users only themselves", %{admin: admin, user: user} do
-      assert {:ok, users} = Accounts.list_users(actor: admin)
-      assert length(users) == 2
+  describe "list_users/0" do
+    test "returns every user" do
+      admin = admin_fixture()
+      user = user_fixture()
 
-      assert {:ok, [own]} = Accounts.list_users(actor: user)
-      assert own.id == user.id
+      ids = Accounts.list_users() |> Enum.map(& &1.id) |> Enum.sort()
+      assert ids == Enum.sort([admin.id, user.id])
+    end
+  end
+
+  describe "session tokens" do
+    test "generate then fetch round-trips the user" do
+      user = user_fixture()
+      token = Accounts.generate_user_session_token(user)
+
+      assert %User{id: id} = Accounts.get_user_by_session_token(token)
+      assert id == user.id
+    end
+
+    test "deleting the token invalidates the session" do
+      user = user_fixture()
+      token = Accounts.generate_user_session_token(user)
+
+      Accounts.delete_user_session_token(token)
+      refute Accounts.get_user_by_session_token(token)
+    end
+  end
+
+  describe "password reset" do
+    test "reset resets the password and drops all sessions (log-out-everywhere)" do
+      {:ok, user} =
+        Accounts.admin_create_user(%{email: "reset@example.com", password: "old-password"})
+
+      session = Accounts.generate_user_session_token(user)
+      reset_token = capture_reset_token(user)
+
+      assert %User{id: id} = Accounts.get_user_by_reset_password_token(reset_token)
+      assert id == user.id
+
+      assert {:ok, _} =
+               Accounts.reset_user_password(user, %{
+                 password: "new-password-123",
+                 password_confirmation: "new-password-123"
+               })
+
+      assert Accounts.get_user_by_email_and_password("reset@example.com", "new-password-123")
+      refute Accounts.get_user_by_email_and_password("reset@example.com", "old-password")
+      refute Accounts.get_user_by_session_token(session)
+    end
+
+    test "an invalid reset token yields no user" do
+      refute Accounts.get_user_by_reset_password_token("not-a-real-token")
+    end
+  end
+
+  defp capture_reset_token(user) do
+    ref = make_ref()
+    parent = self()
+
+    Accounts.deliver_user_reset_password_instructions(user, fn token ->
+      send(parent, {ref, token})
+      "http://localhost/password-reset/#{token}"
+    end)
+
+    receive do
+      {^ref, token} -> token
+    after
+      200 -> flunk("no reset token was delivered")
     end
   end
 end

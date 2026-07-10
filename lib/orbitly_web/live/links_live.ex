@@ -8,7 +8,7 @@ defmodule OrbitlyWeb.LinksLive do
 
   use OrbitlyWeb, :live_view
 
-  on_mount {OrbitlyWeb.LiveUserAuth, :live_user_required}
+  on_mount {OrbitlyWeb.UserAuth, :live_user_required}
 
   alias Orbitly.Shortener
   alias Orbitly.Shortener.Link

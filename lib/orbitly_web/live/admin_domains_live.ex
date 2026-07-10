@@ -7,7 +7,7 @@ defmodule OrbitlyWeb.AdminDomainsLive do
 
   use OrbitlyWeb, :live_view
 
-  on_mount {OrbitlyWeb.LiveUserAuth, :live_admin_required}
+  on_mount {OrbitlyWeb.UserAuth, :live_admin_required}
 
   alias Orbitly.Shortener
   alias Orbitly.Shortener.Domain

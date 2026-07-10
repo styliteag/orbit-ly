@@ -1,4 +1,5 @@
 defmodule Orbitly.Repo do
-  use AshSqlite.Repo,
-    otp_app: :orbitly
+  use Ecto.Repo,
+    otp_app: :orbitly,
+    adapter: Ecto.Adapters.SQLite3
 end

@@ -1,9 +1,7 @@
 defmodule OrbitlyWeb.Router do
   use OrbitlyWeb, :router
 
-  use AshAuthentication.Phoenix.Router
-
-  import AshAuthentication.Plug.Helpers
+  import OrbitlyWeb.UserAuth
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -13,13 +11,7 @@ defmodule OrbitlyWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug OrbitlyWeb.Plugs.ContentSecurityPolicy
-    plug :load_from_session
-  end
-
-  pipeline :api do
-    plug :accepts, ["json"]
-    plug :load_from_bearer
-    plug :set_actor, :user
+    plug :fetch_current_user
   end
 
   # Per-IP throttle for credential submissions (sign-in, reset request).
@@ -30,9 +22,14 @@ defmodule OrbitlyWeb.Router do
   scope "/", OrbitlyWeb do
     pipe_through :browser
 
-    ash_authentication_live_session :authenticated_routes do
-      # each liveview declares its requirement via on_mount:
-      # {OrbitlyWeb.LiveUserAuth, :live_user_required | :live_admin_required | ...}
+    get "/", PageController, :home
+    get "/qr/:id", QrController, :show
+    delete "/sign-out", UserSessionController, :delete
+
+    live_session :authenticated,
+      on_mount: [{OrbitlyWeb.UserAuth, :mount_current_user}] do
+      # Each LiveView declares its own requirement via on_mount, e.g.
+      # {OrbitlyWeb.UserAuth, :live_user_required | :live_admin_required}.
       live "/links", LinksLive, :index
       live "/links/:id/stats", LinkStatsLive, :show
       live "/admin/domains", AdminDomainsLive, :index
@@ -40,55 +37,23 @@ defmodule OrbitlyWeb.Router do
     end
   end
 
-  scope "/", OrbitlyWeb do
-    pipe_through :browser
-
-    get "/", PageController, :home
-    get "/qr/:id", QrController, :show
-    sign_out_route AuthController
-  end
-
   # Credential-handling routes sit behind the per-IP rate limiter.
   scope "/", OrbitlyWeb do
     pipe_through [:browser, :auth_rate_limit]
 
-    auth_routes AuthController, Orbitly.Accounts.User, path: "/auth"
+    post "/session", UserSessionController, :create
 
-    # No open registration (ADR-0006): no register_path.
-    # Accounts are created by the instance admin.
-    sign_in_route reset_path: "/reset",
-                  auth_routes_prefix: "/auth",
-                  on_mount: [{OrbitlyWeb.LiveUserAuth, :live_no_user}],
-                  overrides: [
-                    OrbitlyWeb.AuthOverrides,
-                    Elixir.AshAuthentication.Phoenix.Overrides.Default
-                  ]
-
-    # Remove this if you do not want to use the reset password feature
-    reset_route auth_routes_prefix: "/auth",
-                overrides: [
-                  OrbitlyWeb.AuthOverrides,
-                  Elixir.AshAuthentication.Phoenix.Overrides.Default
-                ]
-
-    # Remove this if you do not use the confirmation strategy
-    confirm_route Orbitly.Accounts.User, :confirm_new_user,
-      auth_routes_prefix: "/auth",
-      overrides: [OrbitlyWeb.AuthOverrides, Elixir.AshAuthentication.Phoenix.Overrides.Default]
+    live_session :auth,
+      on_mount: [{OrbitlyWeb.UserAuth, :mount_current_user}] do
+      # No open registration (ADR-0006): accounts are admin-created.
+      live "/sign-in", UserLoginLive, :new
+      live "/reset", UserForgotPasswordLive, :new
+      live "/password-reset/:token", UserResetPasswordLive, :edit
+    end
   end
-
-  # Other scopes may use custom stacks.
-  # scope "/api", OrbitlyWeb do
-  #   pipe_through :api
-  # end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:orbitly, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do

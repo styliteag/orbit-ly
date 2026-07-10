@@ -18,8 +18,6 @@ defmodule Orbitly.KuttImport do
       in the report so they can be reset.
   """
 
-  require Ash.Query
-
   import Ecto.Query
 
   alias Orbitly.Accounts.User
@@ -160,10 +158,7 @@ defmodule Orbitly.KuttImport do
   end
 
   defp fetch_admin! do
-    User
-    |> Ash.Query.filter(admin == true)
-    |> Ash.read!(authorize?: false)
-    |> case do
+    case Repo.all(from(u in User, where: u.admin == true, limit: 1)) do
       [admin | _] -> admin
       [] -> raise "no admin user found — create one first (see bin/create_admin)"
     end

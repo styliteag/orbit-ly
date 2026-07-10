@@ -43,12 +43,12 @@ fmt:
 setup:
     docker compose run --rm app sh -c "mix local.hex --force && mix local.rebar --force && mix setup"
 
-# Generate a migration from resource changes: just codegen add_feature_x
-codegen NAME:
-    docker compose run --rm app mix ash.codegen {{NAME}}
+# Generate a blank Ecto migration: just gen-migration add_feature_x
+gen-migration NAME:
+    docker compose run --rm app mix ecto.gen.migration {{NAME}}
 
 migrate:
-    docker compose run --rm app mix ash.migrate
+    docker compose run --rm app mix ecto.migrate
 
 # Bump version, update CHANGELOG.md, tag, and push (triggers the GHA release build).
 release type="patch":

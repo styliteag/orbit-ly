@@ -6,7 +6,7 @@ defmodule OrbitlyWeb.AdminUsersLive do
 
   use OrbitlyWeb, :live_view
 
-  on_mount {OrbitlyWeb.LiveUserAuth, :live_admin_required}
+  on_mount {OrbitlyWeb.UserAuth, :live_admin_required}
 
   alias Orbitly.Accounts
   alias Orbitly.Accounts.User
@@ -22,11 +22,12 @@ defmodule OrbitlyWeb.AdminUsersLive do
 
   @impl true
   def handle_event("validate", %{"form" => params}, socket) do
-    {:noreply, assign(socket, :form, AshPhoenix.Form.validate(socket.assigns.form, params))}
+    changeset = Accounts.change_user_admin_create(params) |> Map.put(:action, :validate)
+    {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
   end
 
   def handle_event("save", %{"form" => params}, socket) do
-    case AshPhoenix.Form.submit(socket.assigns.form, params: params) do
+    case Accounts.admin_create_user(params) do
       {:ok, user} ->
         {:noreply,
          socket
@@ -34,16 +35,15 @@ defmodule OrbitlyWeb.AdminUsersLive do
          |> load_users()
          |> assign_new_form()}
 
-      {:error, form} ->
-        {:noreply, assign(socket, :form, form)}
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset, as: "form"))}
     end
   end
 
   def handle_event("toggle-admin", %{"id" => id}, socket) do
     with %User{} = user <- find(socket, id),
          false <- me?(socket, user),
-         {:ok, _} <-
-           Accounts.set_admin(user, %{admin: !user.admin}, actor: socket.assigns.current_user) do
+         {:ok, _} <- Accounts.set_admin(user, !user.admin) do
       {:noreply, load_users(socket)}
     else
       _ -> {:noreply, put_flash(socket, :error, "Could not update user")}
@@ -53,7 +53,7 @@ defmodule OrbitlyWeb.AdminUsersLive do
   def handle_event("delete", %{"id" => id}, socket) do
     with %User{} = user <- find(socket, id),
          false <- me?(socket, user),
-         :ok <- Accounts.destroy_user(user, actor: socket.assigns.current_user) do
+         {:ok, _} <- Accounts.delete_user(user) do
       {:noreply, socket |> put_flash(:info, "User deleted") |> load_users()}
     else
       _ -> {:noreply, put_flash(socket, :error, "Could not delete user")}
@@ -64,18 +64,12 @@ defmodule OrbitlyWeb.AdminUsersLive do
   defp me?(socket, user), do: user.id == socket.assigns.current_user.id
 
   defp load_users(socket) do
-    {:ok, users} = Accounts.list_users(actor: socket.assigns.current_user)
-    assign(socket, :users, Enum.sort_by(users, &to_string(&1.email)))
+    assign(socket, :users, Enum.sort_by(Accounts.list_users(), &to_string(&1.email)))
   end
 
   defp assign_new_form(socket) do
-    form =
-      AshPhoenix.Form.for_create(User, :admin_create,
-        actor: socket.assigns.current_user,
-        as: "form"
-      )
-
-    assign(socket, :form, to_form(form))
+    changeset = Accounts.change_user_admin_create()
+    assign(socket, :form, to_form(changeset, as: "form"))
   end
 
   @impl true

@@ -50,15 +50,7 @@ defmodule Orbitly.MixProject do
   defp deps do
     [
       {:bcrypt_elixir, "~> 3.0"},
-      {:picosat_elixir, "~> 0.2"},
-      {:ash_authentication, "~> 4.0"},
-      {:ash_authentication_phoenix, "~> 2.0"},
-      {:sourceror, "~> 1.8", only: [:dev, :test]},
-      {:ash_sqlite, "~> 0.2"},
       {:eqrcode, "~> 0.2"},
-      {:ash_phoenix, "~> 2.0"},
-      {:ash, "~> 3.0"},
-      {:igniter, "~> 0.6", only: [:dev, :test]},
       {:phoenix, "~> 1.8.9"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
@@ -106,7 +98,7 @@ defmodule Orbitly.MixProject do
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ash.setup --quiet", "test"],
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind orbitly", "esbuild orbitly"],
       "assets.deploy": [
@@ -114,8 +106,7 @@ defmodule Orbitly.MixProject do
         "esbuild orbitly --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
-      "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
 end

@@ -1,307 +1,84 @@
 defmodule Orbitly.Accounts.User do
-  use Ash.Resource,
-    otp_app: :orbitly,
-    domain: Orbitly.Accounts,
-    data_layer: AshSqlite.DataLayer,
-    authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshAuthentication]
+  @moduledoc """
+  Instance user (ADR-0006). Accounts are admin-created (no open registration);
+  `admin` grants full access to domains, users and all links. Plain Ecto +
+  Bcrypt — the `users` table has no timestamps.
+  """
 
-  sqlite do
-    table "users"
-    repo Orbitly.Repo
+  use Ecto.Schema
+
+  import Ecto.Changeset
+
+  @primary_key {:id, Ecto.UUID, autogenerate: true}
+  @foreign_key_type Ecto.UUID
+
+  schema "users" do
+    field :email, :string
+    field :hashed_password, :string, redact: true
+    field :password, :string, virtual: true, redact: true
+    field :confirmed_at, :utc_datetime_usec
+    field :admin, :boolean, default: false
   end
 
-  authentication do
-    add_ons do
-      log_out_everywhere do
-        apply_on_password_change? true
-      end
-
-      confirmation :confirm_new_user do
-        monitor_fields [:email]
-        confirm_on_create? true
-        confirm_on_update? false
-        require_interaction? true
-        confirmed_at_field :confirmed_at
-        auto_confirm_actions [:reset_password_with_token]
-        sender Orbitly.Accounts.User.Senders.SendNewUserConfirmationEmail
-      end
-    end
-
-    tokens do
-      enabled? true
-      token_resource Orbitly.Accounts.Token
-      signing_secret Orbitly.Secrets
-      store_all_tokens? true
-      require_token_presence_for_authentication? true
-    end
-
-    strategies do
-      password :password do
-        identity_field :email
-        hash_provider AshAuthentication.BcryptProvider
-
-        resettable do
-          sender Orbitly.Accounts.User.Senders.SendPasswordResetEmail
-          # these configurations will be the default in a future release
-          password_reset_action_name :reset_password_with_token
-          request_password_reset_action_name :request_password_reset_token
-        end
-      end
-
-      remember_me :remember_me
-    end
+  @doc """
+  Admin-created account: email + initial password. Admin-created accounts are
+  trusted, so they are confirmed immediately (no email round-trip).
+  """
+  def admin_create_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:email, :password])
+    |> validate_email()
+    |> validate_password(opts)
+    |> put_change(:confirmed_at, DateTime.utc_now())
   end
 
-  actions do
-    defaults [:read, :destroy]
+  @doc "New password (password reset). Requires a matching confirmation."
+  def password_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:password])
+    |> validate_confirmation(:password, message: "does not match password")
+    |> validate_password(opts)
+  end
 
-    create :admin_create do
-      description "Create a user account — instance admin only (ADR-0006)."
+  defp validate_email(changeset) do
+    changeset
+    |> validate_required([:email])
+    |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/, message: "must be a valid email")
+    |> validate_length(:email, max: 160)
+    |> update_change(:email, &String.downcase(String.trim(&1)))
+    |> unsafe_validate_unique(:email, Orbitly.Repo)
+    |> unique_constraint(:email, name: "users_unique_email_index")
+  end
 
-      argument :email, :ci_string, allow_nil?: false
+  defp validate_password(changeset, opts) do
+    changeset
+    |> validate_required([:password])
+    # 72 bytes is Bcrypt's input limit.
+    |> validate_length(:password, min: 8, max: 72, count: :bytes)
+    |> maybe_hash_password(opts)
+  end
 
-      argument :password, :string,
-        allow_nil?: false,
-        sensitive?: true,
-        constraints: [min_length: 8]
+  defp maybe_hash_password(changeset, opts) do
+    hash_password? = Keyword.get(opts, :hash_password, true)
+    password = get_change(changeset, :password)
 
-      change set_attribute(:email, arg(:email))
-      change {AshAuthentication.Strategy.Password.HashPasswordChange, strategy_name: :password}
-      # admin-created accounts are trusted, no e-mail confirmation round-trip
-      change set_attribute(:confirmed_at, &DateTime.utc_now/0)
-    end
-
-    update :set_admin do
-      description "Grant or revoke the instance-admin flag."
-
-      argument :admin, :boolean, allow_nil?: false
-
-      accept []
-      require_atomic? false
-      change set_attribute(:admin, arg(:admin))
-    end
-
-    read :get_by_subject do
-      description "Get a user by the subject claim in a JWT"
-      argument :subject, :string, allow_nil?: false
-      get? true
-      prepare AshAuthentication.Preparations.FilterBySubject
-    end
-
-    update :change_password do
-      # Use this action to allow users to change their password by providing
-      # their current password and a new password.
-
-      require_atomic? false
-      accept []
-      argument :current_password, :string, sensitive?: true, allow_nil?: false
-
-      argument :password, :string,
-        sensitive?: true,
-        allow_nil?: false,
-        constraints: [min_length: 8]
-
-      argument :password_confirmation, :string, sensitive?: true, allow_nil?: false
-
-      validate confirm(:password, :password_confirmation)
-
-      validate {AshAuthentication.Strategy.Password.PasswordValidation,
-                strategy_name: :password, password_argument: :current_password}
-
-      change {AshAuthentication.Strategy.Password.HashPasswordChange, strategy_name: :password}
-    end
-
-    read :sign_in_with_password do
-      description "Attempt to sign in using a email and password."
-      get? true
-
-      argument :email, :ci_string do
-        description "The email to use for retrieving the user."
-        allow_nil? false
-      end
-
-      argument :password, :string do
-        description "The password to check for the matching user."
-        allow_nil? false
-        sensitive? true
-      end
-
-      # validates the provided email and password and generates a token
-      prepare AshAuthentication.Strategy.Password.SignInPreparation
-
-      metadata :token, :string do
-        description "A JWT that can be used to authenticate the user."
-        allow_nil? false
-      end
-    end
-
-    read :sign_in_with_token do
-      # In the generated sign in components, we validate the
-      # email and password directly in the LiveView
-      # and generate a short-lived token that can be used to sign in over
-      # a standard controller action, exchanging it for a standard token.
-      # This action performs that exchange. If you do not use the generated
-      # liveviews, you may remove this action, and set
-      # `sign_in_tokens_enabled? false` in the password strategy.
-
-      description "Attempt to sign in using a short-lived sign in token."
-      get? true
-
-      argument :token, :string do
-        description "The short-lived sign in token."
-        allow_nil? false
-        sensitive? true
-      end
-
-      # validates the provided sign in token and generates a token
-      prepare AshAuthentication.Strategy.Password.SignInWithTokenPreparation
-
-      metadata :token, :string do
-        description "A JWT that can be used to authenticate the user."
-        allow_nil? false
-      end
-    end
-
-    create :register_with_password do
-      # ADR-0006: no open registration. The action must exist
-      # (the password strategy requires it) but always fails —
-      # accounts are created by the admin via :admin_create.
-      description "Register a new user with a email and password."
-
-      validate Orbitly.Accounts.Validations.RegistrationDisabled
-
-      argument :email, :ci_string do
-        allow_nil? false
-      end
-
-      argument :password, :string do
-        description "The proposed password for the user, in plain text."
-        allow_nil? false
-        constraints min_length: 8
-        sensitive? true
-      end
-
-      argument :password_confirmation, :string do
-        description "The proposed password for the user (again), in plain text."
-        allow_nil? false
-        sensitive? true
-      end
-
-      # Sets the email from the argument
-      change set_attribute(:email, arg(:email))
-
-      # Hashes the provided password
-      change AshAuthentication.Strategy.Password.HashPasswordChange
-
-      # Generates an authentication token for the user
-      change AshAuthentication.GenerateTokenChange
-
-      # validates that the password matches the confirmation
-      validate AshAuthentication.Strategy.Password.PasswordConfirmationValidation
-
-      metadata :token, :string do
-        description "A JWT that can be used to authenticate the user."
-        allow_nil? false
-      end
-    end
-
-    action :request_password_reset_token do
-      description "Send password reset instructions to a user if they exist."
-
-      argument :email, :ci_string do
-        allow_nil? false
-      end
-
-      # creates a reset token and invokes the relevant senders
-      run {AshAuthentication.Strategy.Password.RequestPasswordReset, action: :get_by_email}
-    end
-
-    read :get_by_email do
-      description "Looks up a user by their email"
-      get_by :email
-    end
-
-    update :reset_password_with_token do
-      argument :reset_token, :string do
-        allow_nil? false
-        sensitive? true
-      end
-
-      argument :password, :string do
-        description "The proposed password for the user, in plain text."
-        allow_nil? false
-        constraints min_length: 8
-        sensitive? true
-      end
-
-      argument :password_confirmation, :string do
-        description "The proposed password for the user (again), in plain text."
-        allow_nil? false
-        sensitive? true
-      end
-
-      # validates the provided reset token
-      validate AshAuthentication.Strategy.Password.ResetTokenValidation
-
-      # validates that the password matches the confirmation
-      validate AshAuthentication.Strategy.Password.PasswordConfirmationValidation
-
-      # Hashes the provided password
-      change AshAuthentication.Strategy.Password.HashPasswordChange
-
-      # Generates an authentication token for the user
-      change AshAuthentication.GenerateTokenChange
+    if hash_password? && password && changeset.valid? do
+      changeset
+      |> put_change(:hashed_password, Bcrypt.hash_pwd_salt(password))
+      |> delete_change(:password)
+    else
+      changeset
     end
   end
 
-  policies do
-    bypass AshAuthentication.Checks.AshAuthenticationInteraction do
-      authorize_if always()
-    end
-
-    policy action_type(:read) do
-      authorize_if actor_attribute_equals(:admin, true)
-      authorize_if expr(id == ^actor(:id))
-    end
-
-    policy action([:admin_create, :set_admin]) do
-      authorize_if actor_attribute_equals(:admin, true)
-    end
-
-    policy action_type(:destroy) do
-      authorize_if actor_attribute_equals(:admin, true)
-    end
-
-    policy action(:change_password) do
-      authorize_if expr(id == ^actor(:id))
-    end
+  @doc "Verifies `password` against the stored hash; runs a dummy check for a missing user (timing)."
+  def valid_password?(%__MODULE__{hashed_password: hashed_password}, password)
+      when is_binary(hashed_password) and byte_size(password) > 0 do
+    Bcrypt.verify_pass(password, hashed_password)
   end
 
-  attributes do
-    uuid_primary_key :id
-
-    attribute :email, :ci_string do
-      allow_nil? false
-      public? true
-    end
-
-    attribute :hashed_password, :string do
-      allow_nil? false
-      sensitive? true
-    end
-
-    attribute :confirmed_at, :utc_datetime_usec
-
-    # Instance admin (ADR-0006): manages domains and users, full access
-    # to all links. Not settable via auth actions, internal only.
-    attribute :admin, :boolean do
-      allow_nil? false
-      default false
-    end
-  end
-
-  identities do
-    identity :unique_email, [:email]
+  def valid_password?(_user, _password) do
+    Bcrypt.no_user_verify()
+    false
   end
 end

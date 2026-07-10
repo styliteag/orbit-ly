@@ -42,23 +42,13 @@ defmodule Orbitly.Release do
 
   @doc false
   def upsert_admin(email, password) do
-    import Ecto.Query
+    alias Orbitly.Accounts
 
-    alias Orbitly.Accounts.User
-
-    if Orbitly.Repo.exists?(from(u in User, where: u.email == ^email)) do
+    if Accounts.get_user_by_email(email) do
       :exists
     else
-      user =
-        User
-        |> Ash.Changeset.for_create(:admin_create, %{email: email, password: password},
-          authorize?: false
-        )
-        |> Ash.create!()
-
-      {1, _} =
-        Orbitly.Repo.update_all(from(u in User, where: u.id == ^user.id), set: [admin: true])
-
+      {:ok, user} = Accounts.admin_create_user(%{email: email, password: password})
+      {:ok, _} = Accounts.set_admin(user, true)
       :created
     end
   end
@@ -93,7 +83,7 @@ defmodule Orbitly.Release do
   defp load_app do
     # Many platforms require SSL when connecting to the database
     Application.ensure_all_started(:ssl)
-    Application.ensure_all_started(:ash)
+    Application.ensure_all_started(:bcrypt_elixir)
     Application.ensure_loaded(@app)
   end
 end

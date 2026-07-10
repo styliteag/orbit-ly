@@ -1,9 +1,9 @@
 defmodule OrbitlyWeb.Plugs.AuthRateLimit do
   @moduledoc """
-  Throttles credential-submitting requests (sign-in, password-reset request)
-  per client IP. Guards the AshAuthentication controller endpoints under
-  `/auth`, which are the surface a scripted brute-force / e-mail-bomb attack
-  hits. Only mutating methods are limited so page loads are unaffected.
+  Throttles the `POST /session` sign-in per client IP — the brute-force surface.
+  Only mutating methods are limited, so page loads are unaffected. (The
+  password-reset request runs over the LiveView socket and is throttled there,
+  in `OrbitlyWeb.UserForgotPasswordLive`.)
   """
 
   import Plug.Conn

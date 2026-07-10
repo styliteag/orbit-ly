@@ -1,5 +1,4 @@
 import Config
-config :ash, policies: [show_policy_breakdowns?: true]
 
 # Configure your database
 config :orbitly, Orbitly.Repo,
@@ -54,10 +53,7 @@ config :orbitly, OrbitlyWeb.Endpoint,
 # different ports.
 
 # Enable dev routes for dashboard and mailbox
-config :orbitly,
-  dev_routes: true,
-  token_signing_secret:
-    System.get_env("TOKEN_SIGNING_SECRET") || "dev_only_token_signing_secret_not_for_production"
+config :orbitly, dev_routes: true
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

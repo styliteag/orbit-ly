@@ -88,11 +88,6 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :orbitly,
-    token_signing_secret:
-      System.get_env("TOKEN_SIGNING_SECRET") ||
-        raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
-
   # Number of trusted reverse proxies in front of the app. The real client
   # IP is read this many entries from the right of x-forwarded-for, so a
   # client cannot spoof it (ADR-0003, OrbitlyWeb.ClientIP). One proxy = 1.
