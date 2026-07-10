@@ -9,7 +9,11 @@ import Config
 
 config :orbitly,
   ecto_repos: [Orbitly.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  # Hard memory bounds for public hot-path state. Test overrides are smaller.
+  redirect_cache_max_entries: 10_000,
+  click_buffer_max_pending: 5_000,
+  rate_limiter_max_entries: 100_000
 
 # Slugs that are never handed out as a short link (ADR-0004): they collide with
 # UI routes on the primary domain. Comparison is case-insensitive.

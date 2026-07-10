@@ -47,3 +47,9 @@ config :orbitly, serve_ui_on_unknown_hosts: true
 
 # No boot sync of the primary domain: tests create domains via fixtures.
 config :orbitly, :ensure_primary_domain, false
+
+# Keep security-boundary tests small and deterministic. Production uses the
+# larger defaults declared by each process.
+config :orbitly,
+  redirect_cache_max_entries: 32,
+  click_buffer_max_pending: 8

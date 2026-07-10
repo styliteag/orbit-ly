@@ -59,4 +59,47 @@ defmodule Orbitly.Shortener.ClickBufferTest do
     all = Shortener.list_click_events(ctx.admin)
     assert length(all) == 2
   end
+
+  test "record/1 drops excess events instead of growing its mailbox without bound", ctx do
+    pid = Process.whereis(ClickBuffer)
+    dropped_before = ClickBuffer.dropped_count()
+
+    :sys.suspend(pid)
+
+    results =
+      try do
+        for i <- 1..24 do
+          ClickBuffer.record(event(ctx.link, %{ip: "203.0.113.#{i}"}))
+        end
+      after
+        :sys.resume(pid)
+      end
+
+    assert Enum.count(results, &(&1 == :ok)) == 8
+    assert Enum.count(results, &(&1 == :dropped)) == 16
+
+    ClickBuffer.flush_now()
+
+    assert length(Shortener.list_click_events(ctx.admin)) == 8
+    assert ClickBuffer.pending_count() == 0
+    assert ClickBuffer.dropped_count() - dropped_before == 16
+  end
+
+  test "record/1 bounds attacker-controlled request metadata before persistence", ctx do
+    assert :ok =
+             ClickBuffer.record(
+               event(ctx.link, %{
+                 ip: String.duplicate("1", 200),
+                 user_agent: String.duplicate("u", 2_000),
+                 referrer: String.duplicate("r", 4_000)
+               })
+             )
+
+    ClickBuffer.flush_now()
+
+    assert [event] = Shortener.list_click_events(ctx.admin)
+    assert byte_size(event.ip) == 64
+    assert byte_size(event.user_agent) == 512
+    assert byte_size(event.referrer) == 1_024
+  end
 end
