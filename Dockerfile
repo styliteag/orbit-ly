@@ -40,11 +40,20 @@ RUN mix local.hex --force \
 
 # set build ENV
 ENV MIX_ENV="prod"
-ARG VERSION=unknown
 
 # install mix dependencies
-COPY mix.exs mix.lock VERSION ./
-RUN if [ "$VERSION" != "unknown" ]; then echo -n "$VERSION" > VERSION; fi
+#
+# VERSION is deliberately NOT the real file yet, and ARG VERSION is declared
+# below rather than here: release.sh bumps VERSION on every release, the layer
+# cache keys on file content, and a build-arg is part of the cache key of every
+# RUN that follows its declaration. Either one above this point invalidates
+# mix deps.compile on every single release — the most expensive step in the
+# build. mix.exs reads VERSION via File.read! at project/0 time, so the file has
+# to exist for `mix deps.get` to run at all; a placeholder satisfies that, and
+# nothing about a dependency depends on the parent app's version. The real
+# version lands after deps.compile, before the app itself is compiled.
+COPY mix.exs mix.lock ./
+RUN echo -n "0.0.0-dev" > VERSION
 RUN mix deps.get --only $MIX_ENV
 RUN mkdir config
 
@@ -53,6 +62,12 @@ RUN mkdir config
 # to be re-compiled.
 COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
+
+# Real version, past the dependency layer: the file for local builds, the
+# build-arg for CI, which passes the tag explicitly.
+ARG VERSION=unknown
+COPY VERSION ./
+RUN if [ "$VERSION" != "unknown" ]; then echo -n "$VERSION" > VERSION; fi
 
 RUN mix assets.setup
 
