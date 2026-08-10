@@ -36,6 +36,107 @@ defmodule Orbitly.Shortener.ClickStats do
     end
   end
 
+  @ranges ~w(30d 90d 12m all)
+  @default_range "12m"
+
+  @doc "Selectable chart ranges, in display order."
+  def ranges, do: @ranges
+
+  def default_range, do: @default_range
+
+  @doc """
+  Click counts bucketed for a chart: daily for the short ranges, monthly for a
+  year and for all time. Gaps are filled with zero so the x axis is continuous,
+  and month buckets are keyed by their first day. Takes one already-authorized
+  link id or a list of them.
+  """
+  def per_bucket(link_ids, range \\ @default_range)
+
+  def per_bucket(link_id, range) when is_binary(link_id), do: per_bucket([link_id], range)
+
+  def per_bucket(link_ids, range) when is_list(link_ids) do
+    case window(link_ids, range) do
+      {:day, from, to} -> %{granularity: :day, points: daily(link_ids, from, to)}
+      {:month, from, to} -> %{granularity: :month, points: monthly(link_ids, from, to)}
+    end
+  end
+
+  defp window(_link_ids, "30d"), do: {:day, Date.add(Date.utc_today(), -29), Date.utc_today()}
+  defp window(_link_ids, "90d"), do: {:day, Date.add(Date.utc_today(), -89), Date.utc_today()}
+
+  defp window(link_ids, "all") do
+    today = Date.utc_today()
+
+    from =
+      case first_click_date(link_ids) do
+        nil -> Date.shift(today, month: -11)
+        date -> date
+      end
+
+    {:month, Date.beginning_of_month(from), today}
+  end
+
+  defp window(_link_ids, _twelve_months) do
+    today = Date.utc_today()
+    {:month, today |> Date.shift(month: -11) |> Date.beginning_of_month(), today}
+  end
+
+  defp first_click_date(link_ids) do
+    from(c in ClickEvent, where: c.link_id in ^link_ids, select: min(c.occurred_at))
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      %DateTime{} = dt -> DateTime.to_date(dt)
+    end
+  end
+
+  defp daily(link_ids, from, to) do
+    counts = grouped_counts(link_ids, from, to, "date(?)")
+
+    from
+    |> Date.range(to)
+    |> Enum.map(fn date -> {date, Map.get(counts, Date.to_iso8601(date), 0)} end)
+  end
+
+  defp monthly(link_ids, from, to) do
+    counts = grouped_counts(link_ids, from, to, "strftime('%Y-%m', ?)")
+
+    from
+    |> months_until(Date.beginning_of_month(to))
+    |> Enum.map(fn date -> {date, Map.get(counts, month_key(date), 0)} end)
+  end
+
+  defp months_until(from, last) do
+    Stream.iterate(from, &Date.shift(&1, month: 1))
+    |> Enum.take_while(&(Date.compare(&1, last) != :gt))
+  end
+
+  defp month_key(date), do: date |> Date.to_iso8601() |> String.slice(0, 7)
+
+  defp grouped_counts(link_ids, from, to, "date(?)") do
+    from(c in ClickEvent,
+      where: c.link_id in ^link_ids,
+      where: c.occurred_at >= ^day_start(from) and c.occurred_at < ^day_start(Date.add(to, 1)),
+      group_by: fragment("date(?)", c.occurred_at),
+      select: {fragment("date(?)", c.occurred_at), count(c.id)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp grouped_counts(link_ids, from, to, _month_fragment) do
+    from(c in ClickEvent,
+      where: c.link_id in ^link_ids,
+      where: c.occurred_at >= ^day_start(from) and c.occurred_at < ^day_start(Date.add(to, 1)),
+      group_by: fragment("strftime('%Y-%m', ?)", c.occurred_at),
+      select: {fragment("strftime('%Y-%m', ?)", c.occurred_at), count(c.id)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp day_start(date), do: DateTime.new!(date, ~T[00:00:00])
+
   def top_referrers(link_id, limit \\ 10) do
     Repo.all(
       from(c in ClickEvent,

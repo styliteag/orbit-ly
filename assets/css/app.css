@@ -313,4 +313,25 @@
 button.copied .copy-idle { display: none; }
 button.copied .copy-done { display: inline-block; }
 
+/* Links list column geometry. The sort header and the rows below it must use
+   the exact same track sizes, otherwise the sort buttons drift away from the
+   columns they sort — so the template lives here once per design instead of
+   as an arbitrary Tailwind class (which the scanner does not pick up from
+   Elixir source anyway).
+   Orbit: checkbox · link block · age · views · actions.
+   Soft:  checkbox · card body (age inside) · views · actions. */
+.links-grid-orbit,
+.links-grid-soft {
+  display: grid;
+  align-items: center;
+  gap: 1rem;
+}
+.links-grid-orbit { grid-template-columns: 1.25rem minmax(0, 1fr) 6rem 6rem 9rem; }
+.links-grid-soft  { grid-template-columns: 1.25rem minmax(0, 1fr) 5rem 9rem; }
+
+/* Chart hover columns (OrbitlyWeb.Charts): invisible hit areas that tint on
+   hover and carry an SVG <title> as the tooltip — no JS, no CSP nonce. */
+.chart-hit { fill: transparent; }
+.chart-hit:hover { fill: currentColor; fill-opacity: 0.08; }
+
 /* This file is for your main application CSS */
