@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SMTP_TLS` (`always` (default) / `if_available` / `never`) selects the TLS
+  mode of the mailer, so a relay without STARTTLS can be used.
+
+### Changed
+
+- `SMTP_USERNAME`/`SMTP_PASSWORD` are optional: set both for an authenticated
+  relay, leave both unset for an internal relay without AUTH (the mailer then
+  uses `auth: :never` and sends no credentials). Setting only one of the two
+  aborts the boot instead of silently sending unauthenticated. Empty values
+  count as unset.
+
 ## [0.1.9] - 2026-07-11
 
 ### Added

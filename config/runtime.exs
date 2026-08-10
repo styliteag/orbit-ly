@@ -140,10 +140,32 @@ if config_env() == :prod do
     end
   end
 
+  # Optional variables are treated as unset when they are empty or blank, so a
+  # `KEY=` line in an .env file means "not configured" instead of "empty value".
+  fetch_optional_env = fn name ->
+    case System.get_env(name) do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      nil ->
+        nil
+    end
+  end
+
   smtp_relay = fetch_nonempty_env.("SMTP_RELAY")
-  smtp_username = fetch_nonempty_env.("SMTP_USERNAME")
-  smtp_password = fetch_nonempty_env.("SMTP_PASSWORD")
+  smtp_username = fetch_optional_env.("SMTP_USERNAME")
+  smtp_password = fetch_optional_env.("SMTP_PASSWORD")
   mail_from = fetch_nonempty_env.("MAIL_FROM")
+
+  # Both or neither — a half-configured pair would silently deliver
+  # unauthenticated instead of surfacing the missing value.
+  if is_nil(smtp_username) != is_nil(smtp_password) do
+    raise "SMTP_USERNAME and SMTP_PASSWORD must be set together " <>
+            "(leave both unset for a relay without authentication)"
+  end
 
   smtp_port =
     case Integer.parse(System.get_env("SMTP_PORT", "587")) do
@@ -151,21 +173,35 @@ if config_env() == :prod do
       _ -> raise "environment variable SMTP_PORT must be an integer between 1 and 65535"
     end
 
-  config :orbitly, Orbitly.Mailer,
-    adapter: Swoosh.Adapters.SMTP,
-    relay: smtp_relay,
-    username: smtp_username,
-    password: smtp_password,
-    port: smtp_port,
-    ssl: false,
-    tls: :always,
-    auth: :always,
-    retries: 2,
-    tls_options: [
-      verify: :verify_peer,
-      cacerts: :public_key.cacerts_get(),
-      server_name_indication: String.to_charlist(smtp_relay)
-    ]
+  smtp_tls =
+    case System.get_env("SMTP_TLS", "always") do
+      "always" -> :always
+      "if_available" -> :if_available
+      "never" -> :never
+      _ -> raise "environment variable SMTP_TLS must be always, if_available or never"
+    end
+
+  smtp_auth = if smtp_username, do: :always, else: :never
+
+  smtp_credentials =
+    if smtp_username, do: [username: smtp_username, password: smtp_password], else: []
+
+  config :orbitly,
+         Orbitly.Mailer,
+         [
+           adapter: Swoosh.Adapters.SMTP,
+           relay: smtp_relay,
+           port: smtp_port,
+           ssl: false,
+           tls: smtp_tls,
+           auth: smtp_auth,
+           retries: 2,
+           tls_options: [
+             verify: :verify_peer,
+             cacerts: :public_key.cacerts_get(),
+             server_name_indication: String.to_charlist(smtp_relay)
+           ]
+         ] ++ smtp_credentials
 
   config :orbitly, :mailer_from, {System.get_env("MAIL_FROM_NAME", "Orbit-ly"), mail_from}
 end

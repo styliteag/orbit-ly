@@ -28,10 +28,8 @@ services:
       # primary domain's hostname at boot; changing it moves the dashboard +
       # all links there to the new domain.
       MAIN_DOMAIN: ${MAIN_DOMAIN:?set the primary domain}
-      # SMTP account used for password-reset emails.
+      # SMTP relay used for password-reset emails.
       SMTP_RELAY: ${SMTP_RELAY:?set the SMTP relay hostname}
-      SMTP_USERNAME: ${SMTP_USERNAME:?set the SMTP username}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:?set the SMTP password}
       MAIL_FROM: ${MAIL_FROM:?set the sender email address}
 
       # --- Optional (defaults shown) ---
@@ -42,8 +40,14 @@ services:
       # limit & click IP act on the wrong x-forwarded-for entry).
       TRUSTED_PROXY_HOPS: "1"
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Orbit-ly}
-      # Authenticated STARTTLS is enforced; most providers use port 587.
+      # SMTP credentials. Set both for an authenticated relay (most providers,
+      # port 587), leave both unset for an internal relay without AUTH — then
+      # usually port 25 and SMTP_TLS=if_available or never.
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_PORT: ${SMTP_PORT:-587}
+      # always (STARTTLS enforced, certificate verified) | if_available | never.
+      SMTP_TLS: ${SMTP_TLS:-always}
 
     volumes:
       # Persistent SQLite DB (incl. -wal/-shm). Do NOT delete.
