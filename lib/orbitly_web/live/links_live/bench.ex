@@ -156,7 +156,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                       {Map.get(@click_counts, link.id, 0)}
                     </td>
                     <td>
-                      <.row_actions link={link} />
+                      <.row_actions link={link} list_query={@list_query} />
                     </td>
                   </tr>
                   <tr :if={@edit_id == link.id} id={"edit-#{link.id}"}>

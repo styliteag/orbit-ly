@@ -30,6 +30,36 @@ defmodule OrbitlyWeb.LinkStatsLiveTest do
     assert html =~ "Chrome"
   end
 
+  test "renders the click chart with a hover label per bucket", %{
+    conn: conn,
+    user: user,
+    link: link
+  } do
+    {:ok, _view, html} = conn |> log_in(user) |> live(~p"/links/#{link.id}/stats")
+
+    assert html =~ ~s(id="per-day-chart")
+    assert html =~ "chart-hit"
+    assert html =~ Calendar.strftime(Date.utc_today(), "%b %Y") <> ": 1 clicks"
+  end
+
+  test "switching the range re-buckets the chart", %{conn: conn, user: user, link: link} do
+    {:ok, view, html} = conn |> log_in(user) |> live(~p"/links/#{link.id}/stats")
+
+    # default is 12 months → month buckets
+    assert html =~ "Busiest month"
+
+    html = view |> element(~s{[phx-click="range"][phx-value-range="30d"]}) |> render_click()
+
+    assert html =~ "Busiest day"
+    assert html =~ Calendar.strftime(Date.utc_today(), "%d %b %Y") <> ": 1 clicks"
+  end
+
+  test "ignores a tampered range", %{conn: conn, user: user, link: link} do
+    {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links/#{link.id}/stats")
+
+    assert render_click(view, "range", %{"range" => "forever"}) =~ "Busiest month"
+  end
+
   test "other users are redirected away", %{conn: conn, link: link} do
     other = registered_user_fixture()
 

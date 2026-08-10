@@ -215,11 +215,15 @@ defmodule OrbitlyWeb.LinksLive.Shared do
   @doc "Stats / QR / edit / delete action cluster for a row."
   attr :link, :map, required: true
 
+  attr :list_query, :string,
+    default: "",
+    doc: "current list state (scope, sorting, …) so the stats page can come back to it"
+
   def row_actions(assigns) do
     ~H"""
     <div class="whitespace-nowrap text-right">
       <.link
-        navigate={~p"/links/#{@link.id}/stats"}
+        navigate={stats_path(@link, @list_query)}
         class="btn btn-ghost btn-xs"
         title="Statistics"
         aria-label="Statistics"
@@ -316,6 +320,9 @@ defmodule OrbitlyWeb.LinksLive.Shared do
     </.form>
     """
   end
+
+  defp stats_path(link, ""), do: ~p"/links/#{link.id}/stats"
+  defp stats_path(link, list_query), do: ~p"/links/#{link.id}/stats?back=#{list_query}"
 
   @doc "Empty-state copy shared by all designs."
   def empty_text(""), do: "No links yet — shorten your first one above."

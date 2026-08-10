@@ -217,6 +217,25 @@ defmodule OrbitlyWeb.LinksLiveTest do
       end
     end
 
+    test "the sort header shares the row grid in the list designs", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link_fixture(user, domain, %{slug: "aligned"})
+
+      for design <- ~w(orbit soft) do
+        conn = conn |> log_in(user) |> put(~p"/design/#{design}")
+        {:ok, _view, html} = live(conn, ~p"/links")
+
+        grid = "links-grid-#{design}"
+
+        # header + one row must use the exact same track template, otherwise
+        # the sort buttons drift away from the columns they sort
+        assert html |> String.split(grid) |> length() >= 3, "#{design}: grid not reused"
+      end
+    end
+
     test "core actions exist in every design", %{conn: conn, user: user, domain: domain} do
       link = link_fixture(user, domain, %{slug: "everywhere"})
 
@@ -634,6 +653,68 @@ defmodule OrbitlyWeb.LinksLiveTest do
       assert remaining == ["filler-9", "zzz-new"]
     end
   end
+
+  describe "list state in the URL" do
+    test "sorting and scope end up in the query string", %{conn: conn, domain: domain} do
+      admin = registered_admin_fixture()
+      link_fixture(admin, domain, %{slug: "keeps-state"})
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+
+      view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
+      view |> element(~s{[phx-click="sort"][phx-value-field="owner"]}) |> render_click()
+
+      assert_patched(view, ~p"/links?dir=asc&scope=all&sort=owner")
+    end
+
+    test "a plain /links stays free of default parameters", %{conn: conn, user: user} do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view |> element(~s{[phx-click="page-size"][phx-value-size="10"]}) |> render_click()
+
+      assert_patched(view, ~p"/links?size=10")
+    end
+
+    test "mounting with parameters restores the view", %{conn: conn, user: user, domain: domain} do
+      link_fixture(user, domain, %{slug: "aaa"})
+      link_fixture(user, domain, %{slug: "zzz"})
+      admin = registered_admin_fixture()
+
+      {:ok, _view, html} =
+        conn |> log_in(admin) |> live(~p"/links?scope=all&sort=short&dir=asc")
+
+      assert first_row_id(html) == Orbitly.Shortener.list_links(user) |> row_id_of("aaa")
+    end
+
+    test "ignores tampered parameters", %{conn: conn, user: user, domain: domain} do
+      link_fixture(user, domain, %{slug: "steady"})
+
+      {:ok, _view, html} =
+        conn |> log_in(user) |> live(~p"/links?scope=everything&sort=owner_id&size=999&page=-3")
+
+      assert html =~ "steady"
+      # falls back to the defaults instead of blowing up
+      assert html =~ "Total links: <b>1</b>"
+    end
+
+    test "the stats page returns to the list it came from", %{conn: conn, domain: domain} do
+      admin = registered_admin_fixture()
+      link = link_fixture(admin, domain, %{slug: "roundtrip"})
+
+      conn = log_in(conn, admin)
+      {:ok, view, _html} = live(conn, ~p"/links?scope=all&sort=owner&dir=asc")
+
+      {:ok, stats, _html} =
+        view
+        |> element(~s{a[href*="/links/#{link.id}/stats"]})
+        |> render_click()
+        |> follow_redirect(conn)
+
+      assert stats |> element(~s{a[href*="/links?"]}) |> render() =~ "scope=all"
+    end
+  end
+
+  defp row_id_of(links, slug), do: Enum.find(links, &(&1.slug == slug)).id
 
   defp first_row_id(html) do
     [_, id] = Regex.run(~r/id="link-([0-9a-f-]{36})"/, html)

@@ -20,28 +20,65 @@ defmodule OrbitlyWeb.LinksLive.Sort do
 
   defp base_fields, do: [{"created", "Age"}, {"clicks", "Hits"}]
 
-  @doc "Sort buttons for the list/card designs."
+  @doc """
+  The sort buttons that belong over the leading (short link / target / owner)
+  block of a row. Trailing columns get their own `sort_button`, placed by the
+  design into the matching grid column.
+  """
   attr :sort_by, :string, required: true
   attr :sort_dir, :atom, required: true
   attr :current_user, :map, required: true
+  attr :fields, :list, required: true, doc: "field keys for this group, in order"
   attr :class, :string, default: nil
 
-  def sort_menu(assigns) do
+  def sort_group(assigns) do
+    assigns = assign(assigns, :labelled, labelled(assigns.current_user, assigns.fields))
+
     ~H"""
     <div class={["flex flex-wrap items-center gap-1 text-xs", @class]}>
       <span class="opacity-60 mr-1">Sort:</span>
-      <button
-        :for={{field, label} <- fields(@current_user)}
-        type="button"
-        class={["btn btn-xs btn-ghost gap-1", @sort_by == field && "btn-active"]}
-        phx-click="sort"
-        phx-value-field={field}
-      >
-        {label}
-        <.sort_arrow active={@sort_by == field} sort_dir={@sort_dir} />
-      </button>
+      <.sort_button
+        :for={{field, label} <- @labelled}
+        field={field}
+        label={label}
+        sort_by={@sort_by}
+        sort_dir={@sort_dir}
+      />
     </div>
     """
+  end
+
+  @doc "One sort button, for a design to place freely."
+  attr :field, :string, required: true
+  attr :label, :string, required: true
+  attr :sort_by, :string, required: true
+  attr :sort_dir, :atom, required: true
+  attr :class, :string, default: nil
+
+  def sort_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class={["btn btn-xs btn-ghost gap-1", @sort_by == @field && "btn-active", @class]}
+      phx-click="sort"
+      phx-value-field={@field}
+    >
+      {@label}
+      <.sort_arrow active={@sort_by == @field} sort_dir={@sort_dir} />
+    </button>
+    """
+  end
+
+  # Keeps the admin-only owner field out for everyone else.
+  defp labelled(current_user, wanted) do
+    allowed = fields(current_user)
+
+    Enum.flat_map(wanted, fn field ->
+      case List.keyfind(allowed, field, 0) do
+        nil -> []
+        pair -> [pair]
+      end
+    end)
   end
 
   @doc "One sortable table header cell."

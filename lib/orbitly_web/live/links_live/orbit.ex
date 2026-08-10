@@ -12,6 +12,10 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
   alias OrbitlyWeb.LinksLive.{Bulk, Sort}
   alias OrbitlyWeb.RelativeTime
 
+  # Checkbox · link block · age · views · actions (track sizes in app.css). The
+  # sort header reuses it — the only way buttons line up with the columns.
+  defp row_grid, do: "links-grid-orbit"
+
   def page(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} wide>
@@ -90,12 +94,32 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
               class="p-4 border-b border-base-content/10"
             />
 
-            <Sort.sort_menu
-              sort_by={@sort_by}
-              sort_dir={@sort_dir}
-              current_user={@current_user}
-              class="px-4 py-2 border-b border-base-content/10"
-            />
+            <%!-- Same grid template as the rows below, so every sort button
+                  sits above the column it sorts. --%>
+            <div class={[row_grid(), "px-5 py-2 border-b border-base-content/10"]}>
+              <span></span>
+              <Sort.sort_group
+                sort_by={@sort_by}
+                sort_dir={@sort_dir}
+                current_user={@current_user}
+                fields={~w(short target owner)}
+              />
+              <Sort.sort_button
+                field="created"
+                label="Age"
+                sort_by={@sort_by}
+                sort_dir={@sort_dir}
+                class="justify-self-end hidden sm:inline-flex"
+              />
+              <Sort.sort_button
+                field="clicks"
+                label="Hits"
+                sort_by={@sort_by}
+                sort_dir={@sort_dir}
+                class="justify-self-end"
+              />
+              <span></span>
+            </div>
 
             <Bulk.bulk_bar
               selected={@selected}
@@ -114,9 +138,9 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
                 data-link-row
                 class="px-5 py-3.5 hover:bg-base-content/[0.04] transition-colors"
               >
-                <div class="flex items-center gap-4">
+                <div class={row_grid()}>
                   <Bulk.row_checkbox link={link} selected={@selected} />
-                  <div class="min-w-0 flex-1">
+                  <div class="min-w-0">
                     <div class="flex items-center gap-1.5">
                       <a
                         href={short_url(link)}
@@ -141,15 +165,15 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
                     <.owner_line link={link} current_user={@current_user} />
                   </div>
                   <span
-                    class="text-xs opacity-40 whitespace-nowrap hidden sm:inline"
+                    class="text-xs opacity-40 whitespace-nowrap text-right hidden sm:block"
                     title={link.inserted_at}
                   >
                     {RelativeTime.ago(link.inserted_at)}
                   </span>
-                  <span class="badge badge-outline border-primary/40 text-primary tabular-nums whitespace-nowrap">
+                  <span class="badge badge-outline border-primary/40 text-primary tabular-nums whitespace-nowrap justify-self-end">
                     {Map.get(@click_counts, link.id, 0)} views
                   </span>
-                  <.row_actions link={link} />
+                  <.row_actions link={link} list_query={@list_query} />
                 </div>
                 <div :if={@edit_id == link.id} class="mt-3 rounded-box bg-base-300/50 px-4">
                   <.edit_panel edit_form={@edit_form} />

@@ -34,21 +34,41 @@ defmodule OrbitlyWeb.LinksLive do
      |> assign(:page_title, "Links")
      |> assign(:design, OrbitlyWeb.Design.validate(session["design"]))
      |> assign(:show_advanced, false)
-     |> assign(:search, "")
-     |> assign(:page, 1)
-     |> assign(:page_size, 20)
      |> assign(:edit_id, nil)
      |> assign(:edit_link, nil)
      |> assign(:edit_form, nil)
      |> assign(:selected, MapSet.new())
-     # An admin starts on their own links and widens deliberately.
-     |> assign(:scope, "own")
-     |> assign(:sort_by, "created")
-     |> assign(:sort_dir, :desc)
      |> load_domains()
      |> load_reassign_targets()
-     |> load_links()
      |> assign_new_form()}
+  end
+
+  # Scope, sorting, search and paging live in the URL, so they survive a visit
+  # to a link's stats page and the browser's back button.
+  @impl true
+  def handle_params(params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(:scope, param(params, "scope", ~w(own all), "own"))
+     |> assign(:sort_by, param(params, "sort", @sort_fields, "created"))
+     |> assign(:sort_dir, if(params["dir"] == "asc", do: :asc, else: :desc))
+     |> assign(:search, to_string(params["q"]))
+     |> assign(:page_size, params |> param("size", ~w(10 20 50), "20") |> String.to_integer())
+     |> assign(:page, page_param(params))
+     |> load_links()
+     |> prune_selection()}
+  end
+
+  defp param(params, key, allowed, default) do
+    value = params[key]
+    if value in allowed, do: value, else: default
+  end
+
+  defp page_param(params) do
+    case Integer.parse(to_string(params["page"])) do
+      {page, ""} when page > 0 -> page
+      _ -> 1
+    end
   end
 
   # --- create form ---
@@ -90,37 +110,25 @@ defmodule OrbitlyWeb.LinksLive do
   # --- table controls ---
 
   def handle_event("search", %{"q" => query}, socket) do
-    {:noreply, socket |> assign(:search, query) |> assign(:page, 1) |> prune_selection()}
+    {:noreply, patch(socket, %{"q" => query, "page" => 1})}
   end
 
   def handle_event("page-size", %{"size" => size}, socket) when size in ~w(10 20 50) do
-    {:noreply,
-     socket
-     |> assign(:page_size, String.to_integer(size))
-     |> assign(:page, 1)
-     |> prune_selection()}
+    {:noreply, patch(socket, %{"size" => size, "page" => 1})}
   end
 
   def handle_event("page-size", _params, socket), do: {:noreply, socket}
 
   def handle_event("scope", %{"scope" => scope}, socket) when scope in ~w(own all) do
-    {:noreply,
-     socket
-     |> assign(:scope, scope)
-     |> assign(:page, 1)
-     |> load_links()
-     |> prune_selection()}
+    {:noreply, patch(socket, %{"scope" => scope, "page" => 1})}
   end
 
   def handle_event("scope", _params, socket), do: {:noreply, socket}
 
   def handle_event("sort", %{"field" => field}, socket) when field in @sort_fields do
-    {:noreply,
-     socket
-     |> assign(:sort_dir, next_sort_dir(socket.assigns, field))
-     |> assign(:sort_by, field)
-     |> assign(:page, 1)
-     |> prune_selection()}
+    dir = next_sort_dir(socket.assigns, field)
+
+    {:noreply, patch(socket, %{"sort" => field, "dir" => dir, "page" => 1})}
   end
 
   def handle_event("sort", _params, socket), do: {:noreply, socket}
@@ -133,10 +141,9 @@ defmodule OrbitlyWeb.LinksLive do
       |> filtered_links(socket.assigns.search)
       |> max_page(socket.assigns.page_size)
 
-    {:noreply,
-     socket
-     |> assign(:page, socket.assigns.page |> Kernel.+(delta) |> max(1) |> min(max_page))
-     |> prune_selection()}
+    page = socket.assigns.page |> Kernel.+(delta) |> max(1) |> min(max_page)
+
+    {:noreply, patch(socket, %{"page" => page})}
   end
 
   # --- inline edit ---
@@ -343,6 +350,37 @@ defmodule OrbitlyWeb.LinksLive do
   defp scope("all"), do: :all
   defp scope(_own), do: :own
 
+  ## -- list state in the URL ------------------------------------------------
+
+  # Only non-default values end up in the query string, so a plain /links stays
+  # a plain /links.
+  @defaults %{
+    "scope" => "own",
+    "sort" => "created",
+    "dir" => "desc",
+    "q" => "",
+    "size" => "20",
+    "page" => "1"
+  }
+
+  defp list_params(assigns, overrides \\ %{}) do
+    %{
+      "scope" => assigns.scope,
+      "sort" => assigns.sort_by,
+      "dir" => to_string(assigns.sort_dir),
+      "q" => assigns.search,
+      "size" => to_string(assigns.page_size),
+      "page" => to_string(assigns.page)
+    }
+    |> Map.merge(Map.new(overrides, fn {key, value} -> {key, to_string(value)} end))
+    |> Enum.reject(fn {key, value} -> value == @defaults[key] end)
+    |> Map.new()
+  end
+
+  defp patch(socket, overrides) do
+    push_patch(socket, to: ~p"/links?#{list_params(socket.assigns, overrides)}")
+  end
+
   defp assign_new_form(socket) do
     changeset =
       Shortener.change_link(
@@ -472,6 +510,8 @@ defmodule OrbitlyWeb.LinksLive do
 
     assigns
     |> assign(:total, length(assigns.links))
+    # Carried into the stats page so its Back link returns to this exact list.
+    |> assign(:list_query, URI.encode_query(list_params(assigns)))
     |> assign(:filtered_count, length(rows.filtered))
     |> assign(:page, rows.page)
     |> assign(:visible, rows.visible)
