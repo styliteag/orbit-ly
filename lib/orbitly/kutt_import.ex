@@ -2,8 +2,9 @@ defmodule Orbitly.KuttImport do
   @moduledoc """
   Imports links from a Kutt instance (via its HTTP API) into orbit-ly.
 
-  Every imported link is assigned to the current instance admin and placed on
-  the primary domain (or the one passed as `:domain`). Slug handling:
+  Every imported link is assigned to the user passed as `:owner` (an email;
+  defaults to the current instance admin) and placed on the primary domain
+  (or the one passed as `:domain`). Slug handling:
 
     * invalid characters for an orbit-ly slug → skipped,
     * a reserved slug (`admin`, `stats`, …) → numeric suffix (`stats-1`),
@@ -20,6 +21,7 @@ defmodule Orbitly.KuttImport do
 
   import Ecto.Query
 
+  alias Orbitly.Accounts
   alias Orbitly.Accounts.User
   alias Orbitly.Repo
   alias Orbitly.Shortener.{ClickEvent, Domain, Link, Slug}
@@ -42,6 +44,7 @@ defmodule Orbitly.KuttImport do
     * `:client` — module implementing `Orbitly.KuttImport.Client` (required)
     * `:config` — map passed to the client (required)
     * `:domain` — target domain hostname; `nil` = the primary domain
+    * `:owner` — email of the user the links belong to; `nil` = the first admin
     * `:now` — reference time for synthesising clicks (defaults to now)
 
   Returns a report map with lists of `{kutt_slug, orbitly_slug}` tuples per
@@ -52,7 +55,7 @@ defmodule Orbitly.KuttImport do
     config = Keyword.fetch!(opts, :config)
     now = Keyword.get(opts, :now, DateTime.utc_now())
 
-    admin = fetch_admin!()
+    owner = fetch_owner!(Keyword.get(opts, :owner))
     domain = fetch_domain!(Keyword.get(opts, :domain))
 
     {:ok, kutt_links} = client.list_links(config)
@@ -61,24 +64,24 @@ defmodule Orbitly.KuttImport do
       kutt_links
       |> Enum.sort_by(&(&1["created_at"] || ""))
       |> Enum.reduce({@empty_report, existing_slugs(domain.id)}, fn kutt_link, acc ->
-        import_link(kutt_link, admin, domain, now, acc)
+        import_link(kutt_link, owner, domain, now, acc)
       end)
 
     finalize(report)
   end
 
-  defp import_link(kutt_link, admin, domain, now, {report, taken}) do
+  defp import_link(kutt_link, owner, domain, now, {report, taken}) do
     case classify(kutt_link["address"], taken) do
       :skip_invalid -> {prepend(report, :skipped_invalid, kutt_link["address"]), taken}
       :skip_exists -> {prepend(report, :skipped_exists, kutt_link["address"]), taken}
-      {:import, slug} -> insert(kutt_link, slug, admin, domain, now, report, taken, :imported)
-      {:rename, slug} -> insert(kutt_link, slug, admin, domain, now, report, taken, :renamed)
+      {:import, slug} -> insert(kutt_link, slug, owner, domain, now, report, taken, :imported)
+      {:rename, slug} -> insert(kutt_link, slug, owner, domain, now, report, taken, :renamed)
     end
   end
 
-  defp insert(kutt_link, slug, admin, domain, now, report, taken, kind) do
+  defp insert(kutt_link, slug, owner, domain, now, report, taken, kind) do
     created = parse_dt(kutt_link["created_at"]) || now
-    link = seed_link(kutt_link, slug, admin.id, domain.id, created)
+    link = seed_link(kutt_link, slug, owner.id, domain.id, created)
     clicks = synth_clicks(link.id, kutt_link["visit_count"] || 0, created, now)
 
     report =
@@ -157,11 +160,16 @@ defmodule Orbitly.KuttImport do
     |> MapSet.new()
   end
 
-  defp fetch_admin! do
+  defp fetch_owner!(nil) do
     case Repo.all(from(u in User, where: u.admin == true, limit: 1)) do
       [admin | _] -> admin
       [] -> raise "no admin user found — create one first (see bin/create_admin)"
     end
+  end
+
+  defp fetch_owner!(email) when is_binary(email) do
+    Accounts.get_user_by_email(email) ||
+      raise "no user with email #{email} — accounts are admin-created (no self-signup)"
   end
 
   defp fetch_domain!(nil) do

@@ -59,9 +59,9 @@ release type="patch":
 publish platforms="all":
     ./build-and-push.sh {{platforms}}
 
-# Import links from a Kutt instance (API). just import-kutt URL KEY [DOMAIN]
-import-kutt url key domain="":
-    docker compose run --rm app mix orbitly.import_kutt --api-url {{url}} --api-key {{key}} {{ if domain == "" { "" } else { "--domain " + domain } }}
+# Import links from a Kutt instance (API). just import-kutt URL KEY [DOMAIN] [OWNER-EMAIL]
+import-kutt url key domain="" owner="":
+    docker compose run --rm app mix orbitly.import_kutt --api-url {{url}} --api-key {{key}} {{ if domain == "" { "" } else { "--domain " + domain } }} {{ if owner == "" { "" } else { "--owner " + owner } }}
 
 # --- Cleanup ------------------------------------------------------------------
 

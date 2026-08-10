@@ -55,12 +55,14 @@ defmodule Orbitly.Release do
 
   @doc """
   Imports links from a Kutt instance into orbit-ly (see `Orbitly.KuttImport`),
-  reading KUTT_API_URL / KUTT_API_KEY and the optional KUTT_DOMAIN from the
-  environment. All links are assigned to the current admin on the primary
-  domain. Idempotent: existing slugs are skipped.
+  reading KUTT_API_URL / KUTT_API_KEY and the optional KUTT_DOMAIN and
+  KUTT_OWNER from the environment. Links land on the primary domain (or
+  KUTT_DOMAIN) and belong to KUTT_OWNER (an existing account's email; without
+  it, the current admin). Idempotent: existing slugs are skipped.
 
   This is the prod entry point (`bin/import_kutt`). In dev, prefer the arg-based
-  mix task `just import-kutt URL KEY [DOMAIN]` (→ `mix orbitly.import_kutt`).
+  mix task `just import-kutt URL KEY [DOMAIN] [OWNER]`
+  (→ `mix orbitly.import_kutt`).
   """
   def import_kutt do
     {:ok, _apps} = Application.ensure_all_started(@app)
@@ -74,7 +76,8 @@ defmodule Orbitly.Release do
     Orbitly.KuttImport.run(
       client: Orbitly.KuttImport.ApiClient,
       config: %{api_url: String.trim_trailing(api_url, "/"), api_key: api_key},
-      domain: System.get_env("KUTT_DOMAIN")
+      domain: System.get_env("KUTT_DOMAIN"),
+      owner: System.get_env("KUTT_OWNER")
     )
     |> Orbitly.KuttImport.Report.print()
   end

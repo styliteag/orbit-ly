@@ -56,6 +56,34 @@ defmodule Orbitly.KuttImportTest do
     assert DateTime.to_date(link.inserted_at) == ~D[2024-01-02]
   end
 
+  test "--owner assigns the links to that user instead of the admin", %{domain: domain} do
+    owner = user_fixture(%{email: "marketing@example.com"})
+
+    report = run([kutt_link(%{"address" => "owned"})], owner: "marketing@example.com")
+
+    assert [{"owned", "owned"}] = report.imported
+    assert [link] = links_by_slug("owned")
+    assert link.owner_id == owner.id
+    assert link.domain_id == domain.id
+  end
+
+  test "--owner matches the email case-insensitively" do
+    owner = user_fixture(%{email: "Mixed@Example.com"})
+
+    run([kutt_link(%{"address" => "case"})], owner: "mixed@example.com")
+
+    assert [link] = links_by_slug("case")
+    assert link.owner_id == owner.id
+  end
+
+  test "an unknown owner email aborts the import" do
+    assert_raise RuntimeError, ~r/nobody@example.com/, fn ->
+      run([kutt_link(%{"address" => "nope"})], owner: "nobody@example.com")
+    end
+
+    assert links_by_slug("nope") == []
+  end
+
   test "a reserved slug gets a numeric suffix" do
     report = run([kutt_link(%{"address" => "stats"})])
 

@@ -21,7 +21,7 @@ only). Sign in at <http://localhost:4000/sign-in> with:
 
 To import links from a Kutt instance in dev, see
 [§7 Import links from Kutt](#7-import-links-from-kutt-optional):
-`just import-kutt <URL> <KEY> [DOMAIN]`.
+`just import-kutt <URL> <KEY> [DOMAIN] [OWNER-EMAIL]`.
 
 Tests:
 
@@ -162,17 +162,22 @@ docker compose -f compose.prod.yml up -d   # migrations run automatically on sta
 ### 7. Import links from Kutt (optional)
 
 `bin/import_kutt` fetches the links of a Kutt instance via its API and creates
-them for the current admin on the primary domain (or `KUTT_DOMAIN`). Idempotent —
-can be run multiple times.
+them on the primary domain (or `KUTT_DOMAIN`) for the current admin — or, with
+`KUTT_OWNER`, for that account (email, case-insensitive; the account must exist,
+there is no self-signup). Idempotent — can be run multiple times.
 
 ```sh
 docker compose -f compose.prod.yml run --rm \
   -e KUTT_API_URL=http://kutt.intern:3000 \
   -e KUTT_API_KEY=<kutt-api-key> \
+  -e KUTT_OWNER=user@example.com \
   app /app/bin/import_kutt
 ```
 
-In dev: `just import-kutt http://localhost:3000 <KEY> [domain]`.
+In dev: `just import-kutt http://localhost:3000 <KEY> [domain] [owner-email]`.
+
+Links already imported onto the wrong account can be moved afterwards: select
+them on `/links` as an admin and use **Reassign**.
 
 Limits (imposed by Kutt's API): only the API-key user's links; **no password
 hashes** — protected links come in without a password and are listed at the end
