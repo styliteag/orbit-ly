@@ -2,14 +2,17 @@ defmodule OrbitlyWeb.LinksLive do
   @moduledoc """
   kutt-style link management: hero shorten form with collapsible advanced
   options (custom slug, expiry as a duration, password, description),
-  searchable/paginated table with inline editing. Admins see all links
-  with their owners (policy-scoped); users see their own.
+  searchable/sortable/paginated table with inline editing and multi-select.
+  A user sees their own links; an admin starts on their own too and widens to
+  every user's links with the scope toggle (owner column and owner sort are
+  admin-only).
 
   Rendering is delegated to one of three switchable designs (see
   `OrbitlyWeb.Design`): `LinksLive.Orbit` (default), `LinksLive.Bench`,
   `LinksLive.Soft`. All designs share this module's events and ids
   (`link-form`, `search-form`, `advanced-options`, `edit-form`,
-  `link-<id>` rows) — the design only changes markup.
+  `link-<id>` rows, `bulk-bar`, plus the `scope` and `sort` events) — the
+  design only changes markup.
   """
 
   use OrbitlyWeb, :live_view
@@ -19,6 +22,10 @@ defmodule OrbitlyWeb.LinksLive do
   alias Orbitly.Accounts
   alias Orbitly.Shortener
   alias Orbitly.Shortener.Link
+
+  # Client-supplied sort values are matched against this list — never converted
+  # to an atom.
+  @sort_fields ~w(short target owner created clicks)
 
   @impl true
   def mount(_params, session, socket) do
@@ -34,6 +41,10 @@ defmodule OrbitlyWeb.LinksLive do
      |> assign(:edit_link, nil)
      |> assign(:edit_form, nil)
      |> assign(:selected, MapSet.new())
+     # An admin starts on their own links and widens deliberately.
+     |> assign(:scope, "own")
+     |> assign(:sort_by, "created")
+     |> assign(:sort_dir, :desc)
      |> load_domains()
      |> load_reassign_targets()
      |> load_links()
@@ -91,6 +102,28 @@ defmodule OrbitlyWeb.LinksLive do
   end
 
   def handle_event("page-size", _params, socket), do: {:noreply, socket}
+
+  def handle_event("scope", %{"scope" => scope}, socket) when scope in ~w(own all) do
+    {:noreply,
+     socket
+     |> assign(:scope, scope)
+     |> assign(:page, 1)
+     |> load_links()
+     |> prune_selection()}
+  end
+
+  def handle_event("scope", _params, socket), do: {:noreply, socket}
+
+  def handle_event("sort", %{"field" => field}, socket) when field in @sort_fields do
+    {:noreply,
+     socket
+     |> assign(:sort_dir, next_sort_dir(socket.assigns, field))
+     |> assign(:sort_by, field)
+     |> assign(:page, 1)
+     |> prune_selection()}
+  end
+
+  def handle_event("sort", _params, socket), do: {:noreply, socket}
 
   def handle_event("page", %{"dir" => dir}, socket) do
     delta = if dir == "next", do: 1, else: -1
@@ -295,10 +328,8 @@ defmodule OrbitlyWeb.LinksLive do
   end
 
   defp load_links(socket) do
-    links =
-      socket.assigns.current_user
-      |> Shortener.list_links()
-      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    # Ordering is the table's business (`sort_links/4`), not the query's.
+    links = Shortener.list_links(socket.assigns.current_user, scope(socket.assigns.scope))
 
     live_ids = MapSet.new(links, & &1.id)
 
@@ -308,6 +339,9 @@ defmodule OrbitlyWeb.LinksLive do
     |> assign(:selected, MapSet.intersection(socket.assigns.selected, live_ids))
     |> assign(:click_counts, Shortener.click_counts(Enum.map(links, & &1.id)))
   end
+
+  defp scope("all"), do: :all
+  defp scope(_own), do: :own
 
   defp assign_new_form(socket) do
     changeset =
@@ -372,13 +406,50 @@ defmodule OrbitlyWeb.LinksLive do
     end
   end
 
-  # What the current page shows — the render path derives the same rows in
-  # `derive_table_assigns/1`; "select all" needs them outside of render.
-  defp visible_links(assigns) do
-    filtered = filtered_links(assigns.links, assigns.search)
-    page = min(assigns.page, max_page(filtered, assigns.page_size))
-    paged(filtered, page, assigns.page_size)
+  # The single source for "which rows are on screen": the render path and the
+  # selection handlers must never derive different sets, otherwise "select all"
+  # picks rows the user is not looking at.
+  defp table_rows(assigns) do
+    filtered =
+      assigns.links
+      |> filtered_links(assigns.search)
+      |> sort_links(assigns.sort_by, assigns.sort_dir, assigns.click_counts)
+
+    max_page = max_page(filtered, assigns.page_size)
+    # Deleting, filtering or re-sorting can leave the cursor past the last page.
+    page = min(assigns.page, max_page)
+
+    %{
+      filtered: filtered,
+      page: page,
+      max_page: max_page,
+      visible: paged(filtered, page, assigns.page_size)
+    }
   end
+
+  defp visible_links(assigns), do: table_rows(assigns).visible
+
+  defp sort_links(links, sort_by, sort_dir, click_counts) do
+    Enum.sort_by(links, &sort_key(&1, sort_by, click_counts), sort_dir)
+  end
+
+  defp sort_key(link, "short", _counts),
+    do: {String.downcase(link.domain.hostname), String.downcase(link.slug)}
+
+  defp sort_key(link, "target", _counts), do: String.downcase(to_string(link.target_url))
+  defp sort_key(link, "owner", _counts), do: String.downcase(owner_email_of(link))
+  defp sort_key(link, "clicks", counts), do: Map.get(counts, link.id, 0)
+  defp sort_key(link, _created, _counts), do: DateTime.to_unix(link.inserted_at, :microsecond)
+
+  defp owner_email_of(%{owner: %{email: email}}) when is_binary(email), do: email
+  defp owner_email_of(_link), do: ""
+
+  # Clicking the active column flips the direction; a new column starts with the
+  # direction that is useful there (newest / most clicks first, text A→Z).
+  defp next_sort_dir(%{sort_by: field, sort_dir: :desc}, field), do: :asc
+  defp next_sort_dir(%{sort_by: field}, field), do: :desc
+  defp next_sort_dir(_assigns, field) when field in ~w(created clicks), do: :desc
+  defp next_sort_dir(_assigns, _field), do: :asc
 
   defp paged(links, page, size), do: Enum.slice(links, (page - 1) * size, size)
   defp max_page(links, size), do: links |> length() |> Kernel./(size) |> ceil() |> max(1)
@@ -397,16 +468,13 @@ defmodule OrbitlyWeb.LinksLive do
   end
 
   defp derive_table_assigns(assigns) do
-    filtered = filtered_links(assigns.links, assigns.search)
-    max_page = max_page(filtered, assigns.page_size)
-    # Deleting or filtering can leave the cursor past the last page.
-    page = min(assigns.page, max_page)
+    rows = table_rows(assigns)
 
     assigns
     |> assign(:total, length(assigns.links))
-    |> assign(:filtered_count, length(filtered))
-    |> assign(:page, page)
-    |> assign(:visible, paged(filtered, page, assigns.page_size))
-    |> assign(:max_page, max_page)
+    |> assign(:filtered_count, length(rows.filtered))
+    |> assign(:page, rows.page)
+    |> assign(:visible, rows.visible)
+    |> assign(:max_page, rows.max_page)
   end
 end

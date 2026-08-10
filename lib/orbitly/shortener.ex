@@ -65,9 +65,15 @@ defmodule Orbitly.Shortener do
 
   ## -- Links --------------------------------------------------------------
 
-  @doc "Links visible to `actor`: own links, or all for an admin. Domain + owner attached."
-  def list_links(actor) do
-    scope_links(actor)
+  @doc """
+  Links visible to `actor`: own links, or all for an admin. Domain + owner
+  attached. `scope` narrows an admin to their own links (`:own`); for a normal
+  user it changes nothing — `:all` never widens a non-admin's view.
+  """
+  def list_links(actor, scope \\ :all) do
+    actor
+    |> scope_links()
+    |> narrow_scope(actor, scope)
     |> Repo.all()
     |> Repo.preload(:domain)
     |> attach_owners(actor)
@@ -252,6 +258,12 @@ defmodule Orbitly.Shortener do
 
   defp scope_links(%{admin: true}), do: from(l in Link)
   defp scope_links(%{id: actor_id}), do: from(l in Link, where: l.owner_id == ^actor_id)
+
+  # Only an admin has a wider view to narrow in the first place.
+  defp narrow_scope(query, %{admin: true, id: actor_id}, :own),
+    do: from(l in query, where: l.owner_id == ^actor_id)
+
+  defp narrow_scope(query, _actor, _scope), do: query
 
   # Bulk ids arrive from the client — drop everything that is not a UUID before
   # it reaches a query (a non-UUID would raise on the Ecto.UUID field type).

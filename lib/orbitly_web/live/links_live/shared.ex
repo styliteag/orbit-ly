@@ -84,6 +84,8 @@ defmodule OrbitlyWeb.LinksLive.Shared do
   attr :page_size, :integer, required: true
   attr :visible, :list, required: true
   attr :selected, :any, required: true
+  attr :scope, :string, required: true
+  attr :current_user, :map, required: true
   attr :class, :string, default: nil
 
   def list_controls(assigns) do
@@ -103,6 +105,17 @@ defmodule OrbitlyWeb.LinksLive.Shared do
         </form>
       </div>
       <div class="flex items-center gap-3 text-sm">
+        <div :if={@current_user.admin} class="join">
+          <button
+            :for={{value, label} <- [{"own", "My links"}, {"all", "All users"}]}
+            type="button"
+            class={["join-item btn btn-xs", @scope == value && "btn-active"]}
+            phx-click="scope"
+            phx-value-scope={value}
+          >
+            {label}
+          </button>
+        </div>
         <span :if={@search == ""} class="opacity-60">Total links: <b>{@total}</b></span>
         <span :if={@search != ""} class="opacity-60">
           <b>{@filtered_count}</b> of {@total} links
@@ -179,15 +192,21 @@ defmodule OrbitlyWeb.LinksLive.Shared do
     """
   end
 
-  @doc "Owner attribution (admins only) and description line."
+  @doc """
+  Owner attribution (admins only) and description line. Designs with a real
+  owner column pass `show_owner={false}` so the email is not printed twice.
+  """
   attr :link, :map, required: true
   attr :current_user, :map, required: true
+  attr :show_owner, :boolean, default: true
 
   def owner_line(assigns) do
+    assigns = assign(assigns, :with_owner, assigns.show_owner and assigns.current_user.admin)
+
     ~H"""
     <p class="text-xs opacity-60 truncate">
-      <span :if={@current_user.admin}>by {@link.owner.email}</span>
-      <span :if={@current_user.admin && @link.description}>·</span>
+      <span :if={@with_owner}>by {@link.owner.email}</span>
+      <span :if={@with_owner && @link.description}>·</span>
       {@link.description}
     </p>
     """

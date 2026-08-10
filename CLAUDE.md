@@ -50,6 +50,12 @@ docker compose run --rm app mix precommit   # before every commit
   `scope_links`, `admin?`, and forces `owner_id` on create (never
   mass-assignable). Data access in the hot path, seeds and fixtures bypasses
   authorization by design.
+- **The links page is admin-scoped by default**: `Shortener.list_links/2` takes
+  `:own` (default in `LinksLive`) or `:all`; `:own` narrows an admin to their
+  own links, `:all` never widens a normal user's view. Filtering, sorting and
+  paging all happen in `LinksLive.table_rows/1` — the one function the render
+  path *and* the selection handlers use, so "select all on this page" can never
+  drift from what is on screen.
 - **Bulk link actions** (`Shortener.delete_links/2`, `reassign_links/3`) run as
   a single `delete_all` / `update_all` (SQLite has one writer — never loop per
   link) and flush `RedirectCache` once. `delete_links` pushes the id list
@@ -79,11 +85,14 @@ docker compose run --rm app mix precommit   # before every commit
   (`Layouts.settings_menu`, active entries highlighted via CSS on
   data-theme). The links page swaps its whole layout per design
   (`LinksLive.Orbit|Bench|Soft`, shared pieces in `LinksLive.Shared`,
-  multi-select pieces in `LinksLive.Bulk`) — event names and ids
-  (`link-form`, `search-form`, `advanced-options`, `edit-form`,
-  `link-<id>`, `bulk-bar`, `bulk-reassign-form`, `toggle-select`,
-  `toggle-select-page`, `bulk-delete`, `bulk-reassign`) are the contract;
-  a new design must render the row checkbox and the bulk bar. Keep design layouts
+  multi-select in `LinksLive.Bulk`, column sorting in `LinksLive.Sort`) —
+  event names and ids (`link-form`, `search-form`, `advanced-options`,
+  `edit-form`, `link-<id>`, `bulk-bar`, `bulk-reassign-form`,
+  `toggle-select`, `toggle-select-page`, `bulk-delete`, `bulk-reassign`,
+  `scope`, `sort`) are the contract; a new design must render the row
+  checkbox, the bulk bar and exactly one sort control (`Sort.sort_menu` for
+  list designs *or* `Sort.sort_header` cells for a table — never both, the
+  selectors must stay unambiguous). Keep design layouts
   mode-agnostic (semantic classes, no hardcoded `white/...`). Fonts are
   self-hosted woff2 in `priv/static/fonts` (CSP `font-src 'self'` — never
   load font CDNs).

@@ -201,6 +201,22 @@ defmodule OrbitlyWeb.LinksLiveTest do
       assert html =~ "Make it"
     end
 
+    test "admin controls exist in every design", %{conn: conn, domain: domain} do
+      admin = registered_admin_fixture()
+      link = link_fixture(admin, domain, %{slug: "admin-owned"})
+
+      for design <- ~w(orbit bench soft) do
+        conn = conn |> log_in(admin) |> put(~p"/design/#{design}")
+        {:ok, view, html} = live(conn, ~p"/links")
+
+        assert html =~ "admin-owned"
+        assert has_element?(view, ~s{[phx-click="scope"][phx-value-scope="own"]})
+        assert has_element?(view, ~s{[phx-click="scope"][phx-value-scope="all"]})
+        assert has_element?(view, ~s{[phx-click="sort"][phx-value-field="owner"]})
+        assert has_element?(view, ~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      end
+    end
+
     test "core actions exist in every design", %{conn: conn, user: user, domain: domain} do
       link = link_fixture(user, domain, %{slug: "everywhere"})
 
@@ -216,6 +232,10 @@ defmodule OrbitlyWeb.LinksLiveTest do
         assert has_element?(view, ~s{[phx-click="delete"][phx-value-id="#{link.id}"]})
         assert has_element?(view, ~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
         assert has_element?(view, ~s{[phx-click="toggle-select-page"]})
+
+        for field <- ~w(short target created clicks) do
+          assert has_element?(view, ~s{[phx-click="sort"][phx-value-field="#{field}"]})
+        end
 
         view
         |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
@@ -382,6 +402,7 @@ defmodule OrbitlyWeb.LinksLiveTest do
       target = registered_user_fixture()
 
       {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+      view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
 
       view
       |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
@@ -411,6 +432,7 @@ defmodule OrbitlyWeb.LinksLiveTest do
       admin = registered_admin_fixture()
 
       {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+      view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
 
       view
       |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
@@ -448,13 +470,174 @@ defmodule OrbitlyWeb.LinksLiveTest do
     assert updated.description == "renamed"
   end
 
-  test "admin sees owner attribution", %{conn: conn, user: user, domain: domain} do
-    link_fixture(user, domain, %{slug: "owned"})
-    admin = registered_admin_fixture()
+  describe "admin scope" do
+    test "an admin starts on their own links only", %{conn: conn, user: user, domain: domain} do
+      link_fixture(user, domain, %{slug: "someone-elses"})
+      admin = registered_admin_fixture()
+      link_fixture(admin, domain, %{slug: "my-own"})
 
-    {:ok, _view, html} = conn |> log_in(admin) |> live(~p"/links")
+      {:ok, _view, html} = conn |> log_in(admin) |> live(~p"/links")
 
-    assert html =~ "by #{user.email}"
+      assert html =~ "my-own"
+      refute html =~ "someone-elses"
+    end
+
+    test "switching to all users shows foreign links with their owner", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link_fixture(user, domain, %{slug: "someone-elses"})
+      admin = registered_admin_fixture()
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+
+      html = view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
+
+      assert html =~ "someone-elses"
+      assert html =~ user.email
+
+      html = view |> element(~s{[phx-click="scope"][phx-value-scope="own"]}) |> render_click()
+      refute html =~ "someone-elses"
+    end
+
+    test "a normal user gets no scope toggle", %{conn: conn, user: user} do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      refute has_element?(view, ~s{[phx-click="scope"]})
+    end
+
+    test "narrowing the scope drops foreign links from the selection", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link = link_fixture(user, domain, %{slug: "foreign"})
+      admin = registered_admin_fixture()
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+      view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#bulk-bar")
+
+      view |> element(~s{[phx-click="scope"][phx-value-scope="own"]}) |> render_click()
+      refute has_element?(view, "#bulk-bar")
+
+      assert [untouched] = Orbitly.Shortener.list_links(user)
+      assert untouched.id == link.id
+    end
+
+    test "ignores a tampered scope payload", %{conn: conn, user: user, domain: domain} do
+      link_fixture(user, domain, %{slug: "steady"})
+      admin = registered_admin_fixture()
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+
+      refute render_click(view, "scope", %{"scope" => "everything"}) =~ "steady"
+    end
+  end
+
+  describe "sorting" do
+    setup %{user: user, domain: domain} do
+      old = link_fixture(user, domain, %{slug: "aaa-old", target_url: "https://zzz.example/"})
+      new = link_fixture(user, domain, %{slug: "zzz-new", target_url: "https://aaa.example/"})
+
+      %{old: old, new: new}
+    end
+
+    test "defaults to newest first and flips on a second click", %{
+      conn: conn,
+      user: user,
+      old: old,
+      new: new
+    } do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      assert first_row_id(render(view)) == new.id
+
+      html = view |> element(~s{[phx-click="sort"][phx-value-field="created"]}) |> render_click()
+      assert first_row_id(html) == old.id
+    end
+
+    test "sorts by short link and by target", %{conn: conn, user: user, old: old, new: new} do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      html = view |> element(~s{[phx-click="sort"][phx-value-field="short"]}) |> render_click()
+      assert first_row_id(html) == old.id
+
+      html = view |> element(~s{[phx-click="sort"][phx-value-field="target"]}) |> render_click()
+      assert first_row_id(html) == new.id
+    end
+
+    test "sorts by clicks", %{conn: conn, user: user, old: old} do
+      for _ <- 1..3 do
+        Orbitly.Repo.insert!(
+          struct(Orbitly.Shortener.ClickEvent, %{
+            link_id: old.id,
+            occurred_at: DateTime.utc_now(),
+            ip: "203.0.113.5"
+          })
+        )
+      end
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      html = view |> element(~s{[phx-click="sort"][phx-value-field="clicks"]}) |> render_click()
+      assert first_row_id(html) == old.id
+    end
+
+    test "an admin can sort by owner", %{conn: conn, domain: domain} do
+      admin = registered_admin_fixture(%{email: "zzz-admin@example.com"})
+      early = registered_user_fixture(%{email: "aaa-user@example.com"})
+      early_link = link_fixture(early, domain, %{slug: "early-owner"})
+      link_fixture(admin, domain, %{slug: "late-owner"})
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+      view |> element(~s{[phx-click="scope"][phx-value-scope="all"]}) |> render_click()
+
+      html = view |> element(~s{[phx-click="sort"][phx-value-field="owner"]}) |> render_click()
+      assert first_row_id(html) == early_link.id
+    end
+
+    test "a normal user gets no owner sort", %{conn: conn, user: user} do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      refute has_element?(view, ~s{[phx-click="sort"][phx-value-field="owner"]})
+    end
+
+    test "ignores a tampered sort field", %{conn: conn, user: user, new: new} do
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      assert first_row_id(render_click(view, "sort", %{"field" => "owner_id; drop"})) == new.id
+    end
+
+    test "select-all takes the sorted page, not the unsorted one", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      for i <- 1..10, do: link_fixture(user, domain, %{slug: "filler-#{i}"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view |> element(~s{[phx-click="page-size"][phx-value-size="10"]}) |> render_click()
+      view |> element(~s{[phx-click="sort"][phx-value-field="short"]}) |> render_click()
+      view |> element(~s{[phx-click="toggle-select-page"]}) |> render_click()
+      view |> element(~s{[phx-click="bulk-delete"]}) |> render_click()
+
+      # Sorted by slug ascending, the first page ends at filler-8.
+      remaining = user |> Orbitly.Shortener.list_links() |> Enum.map(& &1.slug) |> Enum.sort()
+      assert remaining == ["filler-9", "zzz-new"]
+    end
+  end
+
+  defp first_row_id(html) do
+    [_, id] = Regex.run(~r/id="link-([0-9a-f-]{36})"/, html)
+    id
   end
 
   test "deletes an own link", %{conn: conn, user: user, domain: domain} do

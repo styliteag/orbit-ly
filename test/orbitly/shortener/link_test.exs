@@ -162,6 +162,24 @@ defmodule Orbitly.Shortener.LinkTest do
       assert length(all_links) == 2
     end
 
+    test "scope :own narrows an admin to their own links", ctx do
+      link_fixture(ctx.admin, ctx.domain)
+      link_fixture(ctx.other, ctx.domain)
+
+      assert [own] = Shortener.list_links(ctx.admin, :own)
+      assert own.owner_id == ctx.admin.id
+
+      assert length(Shortener.list_links(ctx.admin, :all)) == 2
+    end
+
+    test "scope :all never widens a normal user's view", ctx do
+      link_fixture(ctx.user, ctx.domain)
+      link_fixture(ctx.other, ctx.domain)
+
+      assert [only_mine] = Shortener.list_links(ctx.user, :all)
+      assert only_mine.owner_id == ctx.user.id
+    end
+
     test "only the owner or an admin may update", ctx do
       link = link_fixture(ctx.user, ctx.domain)
 

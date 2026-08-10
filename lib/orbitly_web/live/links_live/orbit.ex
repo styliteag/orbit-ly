@@ -9,7 +9,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
 
   import OrbitlyWeb.LinksLive.Shared
 
-  alias OrbitlyWeb.LinksLive.Bulk
+  alias OrbitlyWeb.LinksLive.{Bulk, Sort}
   alias OrbitlyWeb.RelativeTime
 
   def page(assigns) do
@@ -85,7 +85,16 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
               page_size={@page_size}
               visible={@visible}
               selected={@selected}
+              scope={@scope}
+              current_user={@current_user}
               class="p-4 border-b border-base-content/10"
+            />
+
+            <Sort.sort_menu
+              sort_by={@sort_by}
+              sort_dir={@sort_dir}
+              current_user={@current_user}
+              class="px-4 py-2 border-b border-base-content/10"
             />
 
             <Bulk.bulk_bar

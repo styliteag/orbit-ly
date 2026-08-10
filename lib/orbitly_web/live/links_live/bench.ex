@@ -10,7 +10,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
 
   import OrbitlyWeb.LinksLive.Shared
 
-  alias OrbitlyWeb.LinksLive.Bulk
+  alias OrbitlyWeb.LinksLive.{Bulk, Sort}
   alias OrbitlyWeb.RelativeTime
   alias Phoenix.LiveView.JS
 
@@ -47,6 +47,8 @@ defmodule OrbitlyWeb.LinksLive.Bench do
             page_size={@page_size}
             visible={@visible}
             selected={@selected}
+            scope={@scope}
+            current_user={@current_user}
             class="px-3 py-2 border-b border-base-content/25 bg-base-200"
           />
 
@@ -62,16 +64,47 @@ defmodule OrbitlyWeb.LinksLive.Bench do
               <thead>
                 <tr class="border-b-2 border-base-content/60">
                   <th class="w-8"></th>
-                  <th class="text-[10px] uppercase tracking-[0.15em]">Short</th>
-                  <th class="text-[10px] uppercase tracking-[0.15em]">Target</th>
-                  <th class="text-[10px] uppercase tracking-[0.15em]">Age</th>
-                  <th class="text-[10px] uppercase tracking-[0.15em] text-right">Hits</th>
+                  <Sort.sort_header
+                    field="short"
+                    label="Short"
+                    sort_by={@sort_by}
+                    sort_dir={@sort_dir}
+                  />
+                  <Sort.sort_header
+                    field="target"
+                    label="Target"
+                    sort_by={@sort_by}
+                    sort_dir={@sort_dir}
+                  />
+                  <Sort.sort_header
+                    :if={@current_user.admin}
+                    field="owner"
+                    label="Owner"
+                    sort_by={@sort_by}
+                    sort_dir={@sort_dir}
+                  />
+                  <Sort.sort_header
+                    field="created"
+                    label="Age"
+                    sort_by={@sort_by}
+                    sort_dir={@sort_dir}
+                  />
+                  <Sort.sort_header
+                    field="clicks"
+                    label="Hits"
+                    sort_by={@sort_by}
+                    sort_dir={@sort_dir}
+                    class="text-right"
+                  />
                   <th></th>
                 </tr>
               </thead>
               <tbody class="brand-mono text-[13px]">
                 <tr :if={@visible == []}>
-                  <td colspan="6" class="text-center opacity-60 py-8 font-sans">
+                  <td
+                    colspan={if @current_user.admin, do: "7", else: "6"}
+                    class="text-center opacity-60 py-8 font-sans"
+                  >
                     {empty_text(@search)}
                   </td>
                 </tr>
@@ -107,7 +140,14 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                       >
                         {link.target_url}
                       </a>
-                      <.owner_line link={link} current_user={@current_user} />
+                      <.owner_line link={link} current_user={@current_user} show_owner={false} />
+                    </td>
+                    <td
+                      :if={@current_user.admin}
+                      class="max-w-[12rem] truncate opacity-70"
+                      title={link.owner && link.owner.email}
+                    >
+                      {link.owner && link.owner.email}
                     </td>
                     <td class="whitespace-nowrap opacity-50" title={link.inserted_at}>
                       {RelativeTime.ago(link.inserted_at)}
@@ -120,7 +160,10 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     </td>
                   </tr>
                   <tr :if={@edit_id == link.id} id={"edit-#{link.id}"}>
-                    <td colspan="6" class="bg-base-200/60 font-sans">
+                    <td
+                      colspan={if @current_user.admin, do: "7", else: "6"}
+                      class="bg-base-200/60 font-sans"
+                    >
                       <.edit_panel edit_form={@edit_form} />
                     </td>
                   </tr>
