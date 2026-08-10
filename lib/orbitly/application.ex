@@ -5,8 +5,12 @@ defmodule Orbitly.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
+    Logger.info("Starting Stylite Orbit-ly #{Orbitly.version()}")
+
     children = [
       OrbitlyWeb.Telemetry,
       Orbitly.Repo,
