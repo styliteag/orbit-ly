@@ -39,6 +39,10 @@ npm-debug.log
 *.db
 *.db-*
 
+# Database dumps (Kutt migration) — these carry user password hashes and API keys.
+*.sql
+*.sql.gz
+
 # Docker data
 data/
 

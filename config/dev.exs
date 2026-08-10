@@ -2,7 +2,9 @@ import Config
 
 # Configure your database
 config :orbitly, Orbitly.Repo,
-  database: Path.expand("../orbitly_dev.db", __DIR__),
+  # DATABASE_PATH lets dev point at another SQLite file (e.g. a copy of the
+  # production DB) without touching the normal dev database.
+  database: System.get_env("DATABASE_PATH") || Path.expand("../orbitly_dev.db", __DIR__),
   pool_size: 5,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true
