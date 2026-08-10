@@ -214,7 +214,213 @@ defmodule OrbitlyWeb.LinksLiveTest do
         assert has_element?(view, "#advanced-options")
         assert has_element?(view, ~s{[phx-click="edit"][phx-value-id="#{link.id}"]})
         assert has_element?(view, ~s{[phx-click="delete"][phx-value-id="#{link.id}"]})
+        assert has_element?(view, ~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+        assert has_element?(view, ~s{[phx-click="toggle-select-page"]})
+
+        view
+        |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+        |> render_click()
+
+        assert has_element?(view, "#bulk-bar")
+        assert has_element?(view, ~s{[phx-click="bulk-delete"]})
       end
+    end
+  end
+
+  describe "bulk actions" do
+    test "deletes the selected links", %{conn: conn, user: user, domain: domain} do
+      a = link_fixture(user, domain, %{slug: "bulk-a"})
+      b = link_fixture(user, domain, %{slug: "bulk-b"})
+      keep = link_fixture(user, domain, %{slug: "bulk-keep"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      for id <- [a.id, b.id] do
+        view |> element(~s{[phx-click="toggle-select"][phx-value-id="#{id}"]}) |> render_click()
+      end
+
+      assert render(view) =~ "2 selected"
+
+      view |> element(~s{[phx-click="bulk-delete"]}) |> render_click()
+
+      html = render(view)
+      assert html =~ "2 links deleted"
+      refute html =~ "bulk-a"
+      refute html =~ "bulk-b"
+
+      assert [survivor] = Orbitly.Shortener.list_links(user)
+      assert survivor.id == keep.id
+    end
+
+    test "the bar disappears once the selection is empty", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link = link_fixture(user, domain, %{slug: "toggle-me"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+      refute has_element?(view, "#bulk-bar")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#bulk-bar")
+
+      view |> element(~s{[phx-click="clear-selection"]}) |> render_click()
+      refute has_element?(view, "#bulk-bar")
+    end
+
+    test "select-all only takes the current page", %{conn: conn, user: user, domain: domain} do
+      for i <- 1..12, do: link_fixture(user, domain, %{slug: "page-#{i}"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view |> element(~s{[phx-click="page-size"][phx-value-size="10"]}) |> render_click()
+      html = view |> element(~s{[phx-click="toggle-select-page"]}) |> render_click()
+
+      assert html =~ "10 selected"
+
+      view |> element(~s{[phx-click="bulk-delete"]}) |> render_click()
+      assert length(Orbitly.Shortener.list_links(user)) == 2
+    end
+
+    test "select-all toggles the page off again", %{conn: conn, user: user, domain: domain} do
+      link_fixture(user, domain, %{slug: "one"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      assert view |> element(~s{[phx-click="toggle-select-page"]}) |> render_click() =~
+               "1 selected"
+
+      view |> element(~s{[phx-click="toggle-select-page"]}) |> render_click()
+      refute has_element?(view, "#bulk-bar")
+    end
+
+    test "a search that hides a selected link drops it from the selection", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      apple = link_fixture(user, domain, %{slug: "apple", target_url: "https://apple.example/"})
+      link_fixture(user, domain, %{slug: "banana", target_url: "https://banana.example/"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{apple.id}"]})
+      |> render_click()
+
+      assert render(view) =~ "1 selected"
+
+      view |> form("#search-form") |> render_change(%{"q" => "banana"})
+      refute has_element?(view, "#bulk-bar")
+
+      assert length(Orbitly.Shortener.list_links(user)) == 2
+    end
+
+    test "paging away from a selected link drops it from the selection", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      for i <- 1..12, do: link_fixture(user, domain, %{slug: "paged-#{i}"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view |> element(~s{[phx-click="page-size"][phx-value-size="10"]}) |> render_click()
+
+      assert view |> element(~s{[phx-click="toggle-select-page"]}) |> render_click() =~
+               "10 selected"
+
+      view |> element(~s{[phx-click="page"][phx-value-dir="next"]}) |> render_click()
+      refute has_element?(view, "#bulk-bar")
+    end
+
+    test "a normal user gets no reassign form", %{conn: conn, user: user, domain: domain} do
+      link = link_fixture(user, domain, %{slug: "mine"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#bulk-bar")
+      refute has_element?(view, "#bulk-reassign-form")
+    end
+
+    test "a tampered reassign event from a normal user is refused", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link = link_fixture(user, domain, %{slug: "not-yours"})
+      other = registered_user_fixture()
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert render_submit(view, "bulk-reassign", %{"owner_id" => other.id}) =~
+               "Not allowed to reassign links"
+
+      assert [unchanged] = Orbitly.Shortener.list_links(user)
+      assert unchanged.owner_id == user.id
+    end
+
+    test "an admin reassigns selected links to another user", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link = link_fixture(user, domain, %{slug: "handover"})
+      admin = registered_admin_fixture()
+      target = registered_user_fixture()
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#bulk-reassign-form")
+
+      html =
+        view
+        |> form("#bulk-reassign-form", %{"owner_id" => target.id})
+        |> render_submit()
+
+      assert html =~ "1 link moved to #{target.email}"
+      assert html =~ "by #{target.email}"
+
+      assert [] = Orbitly.Shortener.list_links(user)
+      assert [moved] = Orbitly.Shortener.list_links(target)
+      assert moved.id == link.id
+    end
+
+    test "reassign without a target user complains instead of moving", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      link = link_fixture(user, domain, %{slug: "stay"})
+      admin = registered_admin_fixture()
+
+      {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/links")
+
+      view
+      |> element(~s{[phx-click="toggle-select"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert view |> form("#bulk-reassign-form", %{"owner_id" => ""}) |> render_submit() =~
+               "Pick a user to reassign to"
+
+      assert [unchanged] = Orbitly.Shortener.list_links(user)
+      assert unchanged.owner_id == user.id
     end
   end
 

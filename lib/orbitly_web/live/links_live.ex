@@ -16,6 +16,7 @@ defmodule OrbitlyWeb.LinksLive do
 
   on_mount {OrbitlyWeb.UserAuth, :live_user_required}
 
+  alias Orbitly.Accounts
   alias Orbitly.Shortener
   alias Orbitly.Shortener.Link
 
@@ -32,7 +33,9 @@ defmodule OrbitlyWeb.LinksLive do
      |> assign(:edit_id, nil)
      |> assign(:edit_link, nil)
      |> assign(:edit_form, nil)
+     |> assign(:selected, MapSet.new())
      |> load_domains()
+     |> load_reassign_targets()
      |> load_links()
      |> assign_new_form()}
   end
@@ -76,11 +79,15 @@ defmodule OrbitlyWeb.LinksLive do
   # --- table controls ---
 
   def handle_event("search", %{"q" => query}, socket) do
-    {:noreply, socket |> assign(:search, query) |> assign(:page, 1)}
+    {:noreply, socket |> assign(:search, query) |> assign(:page, 1) |> prune_selection()}
   end
 
   def handle_event("page-size", %{"size" => size}, socket) when size in ~w(10 20 50) do
-    {:noreply, socket |> assign(:page_size, String.to_integer(size)) |> assign(:page, 1)}
+    {:noreply,
+     socket
+     |> assign(:page_size, String.to_integer(size))
+     |> assign(:page, 1)
+     |> prune_selection()}
   end
 
   def handle_event("page-size", _params, socket), do: {:noreply, socket}
@@ -94,7 +101,9 @@ defmodule OrbitlyWeb.LinksLive do
       |> max_page(socket.assigns.page_size)
 
     {:noreply,
-     assign(socket, :page, socket.assigns.page |> Kernel.+(delta) |> max(1) |> min(max_page))}
+     socket
+     |> assign(:page, socket.assigns.page |> Kernel.+(delta) |> max(1) |> min(max_page))
+     |> prune_selection()}
   end
 
   # --- inline edit ---
@@ -161,6 +170,99 @@ defmodule OrbitlyWeb.LinksLive do
     end
   end
 
+  # --- bulk selection ---
+
+  def handle_event("toggle-select", %{"id" => id}, socket) do
+    selected = socket.assigns.selected
+
+    selected =
+      if MapSet.member?(selected, id),
+        do: MapSet.delete(selected, id),
+        else: MapSet.put(selected, id)
+
+    {:noreply, assign(socket, :selected, selected)}
+  end
+
+  def handle_event("toggle-select-page", _params, socket) do
+    ids = socket.assigns |> visible_links() |> Enum.map(& &1.id)
+    selected = socket.assigns.selected
+
+    selected =
+      if ids != [] and Enum.all?(ids, &MapSet.member?(selected, &1)) do
+        Enum.reduce(ids, selected, fn id, acc -> MapSet.delete(acc, id) end)
+      else
+        Enum.reduce(ids, selected, fn id, acc -> MapSet.put(acc, id) end)
+      end
+
+    {:noreply, assign(socket, :selected, selected)}
+  end
+
+  def handle_event("clear-selection", _params, socket) do
+    {:noreply, assign(socket, :selected, MapSet.new())}
+  end
+
+  def handle_event("bulk-delete", _params, socket) do
+    ids = MapSet.to_list(socket.assigns.selected)
+
+    case Shortener.delete_links(ids, socket.assigns.current_user) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize(count, "link")} deleted")
+         |> assign(:selected, MapSet.new())
+         |> load_links()}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not delete the selected links")}
+    end
+  end
+
+  def handle_event("bulk-reassign", %{"owner_id" => ""}, socket) do
+    {:noreply, put_flash(socket, :error, "Pick a user to reassign to")}
+  end
+
+  def handle_event("bulk-reassign", %{"owner_id" => owner_id}, socket) do
+    ids = MapSet.to_list(socket.assigns.selected)
+
+    case Shortener.reassign_links(ids, owner_id, socket.assigns.current_user) do
+      {:ok, count} ->
+        # Refresh first: the target may have been created after this mount.
+        socket = load_reassign_targets(socket)
+
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           "#{count} #{pluralize(count, "link")} moved to #{owner_email(socket, owner_id)}"
+         )
+         |> assign(:selected, MapSet.new())
+         |> load_links()}
+
+      {:error, :invalid_owner} ->
+        {:noreply, put_flash(socket, :error, "Unknown user")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Not allowed to reassign links")}
+    end
+  end
+
+  # A destructive action must never act on rows the user cannot see: searching
+  # or paging away from a selected row drops it from the selection.
+  defp prune_selection(socket) do
+    visible_ids = socket.assigns |> visible_links() |> MapSet.new(& &1.id)
+    assign(socket, :selected, MapSet.intersection(socket.assigns.selected, visible_ids))
+  end
+
+  defp pluralize(1, word), do: word
+  defp pluralize(_count, word), do: word <> "s"
+
+  defp owner_email(socket, owner_id) do
+    case Enum.find(socket.assigns.users, &(&1.id == owner_id)) do
+      %{email: email} -> email
+      _ -> "another user"
+    end
+  end
+
   # --- data ---
 
   defp load_domains(socket) do
@@ -180,14 +282,30 @@ defmodule OrbitlyWeb.LinksLive do
     |> assign(:default_domain_id, default_domain_id)
   end
 
+  # Reassignment is admin-only, so only an admin ever gets the account list.
+  defp load_reassign_targets(socket) do
+    users =
+      if socket.assigns.current_user.admin do
+        Enum.map(Accounts.list_users(), &%{id: &1.id, email: &1.email})
+      else
+        []
+      end
+
+    assign(socket, :users, users)
+  end
+
   defp load_links(socket) do
     links =
       socket.assigns.current_user
       |> Shortener.list_links()
       |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
 
+    live_ids = MapSet.new(links, & &1.id)
+
     socket
     |> assign(:links, links)
+    # Deleted or reassigned-away links must not linger in the selection.
+    |> assign(:selected, MapSet.intersection(socket.assigns.selected, live_ids))
     |> assign(:click_counts, Shortener.click_counts(Enum.map(links, & &1.id)))
   end
 
@@ -252,6 +370,14 @@ defmodule OrbitlyWeb.LinksLive do
         |> Enum.any?(&(&1 && String.contains?(String.downcase(to_string(&1)), query)))
       end)
     end
+  end
+
+  # What the current page shows — the render path derives the same rows in
+  # `derive_table_assigns/1`; "select all" needs them outside of render.
+  defp visible_links(assigns) do
+    filtered = filtered_links(assigns.links, assigns.search)
+    page = min(assigns.page, max_page(filtered, assigns.page_size))
+    paged(filtered, page, assigns.page_size)
   end
 
   defp paged(links, page, size), do: Enum.slice(links, (page - 1) * size, size)

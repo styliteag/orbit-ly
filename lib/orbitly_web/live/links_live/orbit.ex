@@ -9,6 +9,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
 
   import OrbitlyWeb.LinksLive.Shared
 
+  alias OrbitlyWeb.LinksLive.Bulk
   alias OrbitlyWeb.RelativeTime
 
   def page(assigns) do
@@ -82,7 +83,16 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
               page={@page}
               max_page={@max_page}
               page_size={@page_size}
+              visible={@visible}
+              selected={@selected}
               class="p-4 border-b border-base-content/10"
+            />
+
+            <Bulk.bulk_bar
+              selected={@selected}
+              users={@users}
+              current_user={@current_user}
+              class="px-4 py-2 border-b border-base-content/10"
             />
 
             <div class="divide-y divide-base-content/10">
@@ -96,6 +106,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
                 class="px-5 py-3.5 hover:bg-base-content/[0.04] transition-colors"
               >
                 <div class="flex items-center gap-4">
+                  <Bulk.row_checkbox link={link} selected={@selected} />
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
                       <a

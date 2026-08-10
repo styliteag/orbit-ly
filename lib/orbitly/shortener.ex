@@ -162,6 +162,52 @@ defmodule Orbitly.Shortener do
     end
   end
 
+  @doc """
+  Bulk delete of the links with the given ids, in one statement (SQLite has a
+  single writer — never loop deletes here). The ids run through the actor's
+  scope, so a tampered id list can only ever hit links the actor may access;
+  unknown or malformed ids are ignored. Click events follow via the DB foreign
+  key (`on_delete: :delete_all`). Returns `{:ok, deleted_count}`.
+  """
+  def delete_links(ids, actor) when is_list(ids) do
+    if is_nil(actor) do
+      {:error, :unauthorized}
+    else
+      uuids = valid_uuids(ids)
+
+      {count, _} =
+        actor
+        |> scope_links()
+        |> where([l], l.id in ^uuids)
+        |> Repo.delete_all()
+
+      flush_and_count(count)
+    end
+  end
+
+  @doc """
+  Moves the given links to another owner. Admin-only: a normal user must not
+  even learn that other accounts exist (no open registration, ADR-0006).
+  `owner_id` stays out of the create/update changesets — this is the only way
+  it ever changes, mirroring `Domain.primary_changeset`. Returns
+  `{:ok, moved_count}`, `{:error, :unauthorized}` or `{:error, :invalid_owner}`.
+  """
+  def reassign_links(ids, new_owner_id, actor) when is_list(ids) do
+    with true <- admin?(actor),
+         {:ok, owner_id} <- existing_user_id(new_owner_id) do
+      uuids = valid_uuids(ids)
+
+      {count, _} =
+        from(l in Link, where: l.id in ^uuids)
+        |> Repo.update_all(set: [owner_id: owner_id, updated_at: DateTime.utc_now()])
+
+      flush_and_count(count)
+    else
+      false -> {:error, :unauthorized}
+      :error -> {:error, :invalid_owner}
+    end
+  end
+
   ## -- Click events -------------------------------------------------------
 
   @doc "Click events visible to `actor`: for own links, or all for an admin."
@@ -206,6 +252,25 @@ defmodule Orbitly.Shortener do
 
   defp scope_links(%{admin: true}), do: from(l in Link)
   defp scope_links(%{id: actor_id}), do: from(l in Link, where: l.owner_id == ^actor_id)
+
+  # Bulk ids arrive from the client — drop everything that is not a UUID before
+  # it reaches a query (a non-UUID would raise on the Ecto.UUID field type).
+  defp valid_uuids(ids) do
+    for id <- ids, is_binary(id), {:ok, uuid} <- [Ecto.UUID.cast(id)], do: uuid
+  end
+
+  # Accounts is a separate context; the users table is read directly here, same
+  # as in `owner_map/1`.
+  defp existing_user_id(id) when is_binary(id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         true <- Repo.exists?(from(u in "users", where: u.id == ^uuid, select: 1)) do
+      {:ok, uuid}
+    else
+      _ -> :error
+    end
+  end
+
+  defp existing_user_id(_id), do: :error
 
   ## -- Owner attachment (Accounts is still Ash) ---------------------------
 
@@ -332,4 +397,10 @@ defmodule Orbitly.Shortener do
   end
 
   defp flush_and_ok({:error, _} = error), do: error
+
+  # Bulk operations flush once, not once per row.
+  defp flush_and_count(count) do
+    RedirectCache.flush()
+    {:ok, count}
+  end
 end

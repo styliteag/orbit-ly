@@ -50,6 +50,13 @@ docker compose run --rm app mix precommit   # before every commit
   `scope_links`, `admin?`, and forces `owner_id` on create (never
   mass-assignable). Data access in the hot path, seeds and fixtures bypasses
   authorization by design.
+- **Bulk link actions** (`Shortener.delete_links/2`, `reassign_links/3`) run as
+  a single `delete_all` / `update_all` (SQLite has one writer — never loop per
+  link) and flush `RedirectCache` once. `delete_links` pushes the id list
+  through `scope_links(actor)`, so tampered ids can never reach someone else's
+  link; non-UUID ids are dropped before the query. Reassigning an owner is
+  admin-only (a normal user must not see the account list, ADR-0006) and is the
+  only path that ever changes `owner_id` — it stays out of every changeset.
 - **Auth is plain Phoenix session auth** (phx.gen.auth model, `OrbitlyWeb.UserAuth`):
   opaque session tokens in `users_tokens`, Bcrypt passwords, reset tokens stored
   SHA-256-hashed. `fetch_current_user` plug + `on_mount` hooks
@@ -71,9 +78,12 @@ docker compose run --rm app mix precommit   # before every commit
   light-first (`default_mode/1`). Everything sits in the navbar gear menu
   (`Layouts.settings_menu`, active entries highlighted via CSS on
   data-theme). The links page swaps its whole layout per design
-  (`LinksLive.Orbit|Bench|Soft`, shared pieces in `LinksLive.Shared`) —
-  event names and ids (`link-form`, `search-form`, `advanced-options`,
-  `edit-form`, `link-<id>`) are the contract; keep design layouts
+  (`LinksLive.Orbit|Bench|Soft`, shared pieces in `LinksLive.Shared`,
+  multi-select pieces in `LinksLive.Bulk`) — event names and ids
+  (`link-form`, `search-form`, `advanced-options`, `edit-form`,
+  `link-<id>`, `bulk-bar`, `bulk-reassign-form`, `toggle-select`,
+  `toggle-select-page`, `bulk-delete`, `bulk-reassign`) are the contract;
+  a new design must render the row checkbox and the bulk bar. Keep design layouts
   mode-agnostic (semantic classes, no hardcoded `white/...`). Fonts are
   self-hosted woff2 in `priv/static/fonts` (CSP `font-src 'self'` — never
   load font CDNs).

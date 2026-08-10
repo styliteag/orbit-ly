@@ -10,6 +10,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
 
   import OrbitlyWeb.LinksLive.Shared
 
+  alias OrbitlyWeb.LinksLive.Bulk
   alias OrbitlyWeb.RelativeTime
   alias Phoenix.LiveView.JS
 
@@ -44,13 +45,23 @@ defmodule OrbitlyWeb.LinksLive.Bench do
             page={@page}
             max_page={@max_page}
             page_size={@page_size}
+            visible={@visible}
+            selected={@selected}
             class="px-3 py-2 border-b border-base-content/25 bg-base-200"
+          />
+
+          <Bulk.bulk_bar
+            selected={@selected}
+            users={@users}
+            current_user={@current_user}
+            class="px-3 py-2 border-b border-base-content/25"
           />
 
           <div class="overflow-x-auto">
             <table class="table table-sm">
               <thead>
                 <tr class="border-b-2 border-base-content/60">
+                  <th class="w-8"></th>
                   <th class="text-[10px] uppercase tracking-[0.15em]">Short</th>
                   <th class="text-[10px] uppercase tracking-[0.15em]">Target</th>
                   <th class="text-[10px] uppercase tracking-[0.15em]">Age</th>
@@ -60,7 +71,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
               </thead>
               <tbody class="brand-mono text-[13px]">
                 <tr :if={@visible == []}>
-                  <td colspan="5" class="text-center opacity-60 py-8 font-sans">
+                  <td colspan="6" class="text-center opacity-60 py-8 font-sans">
                     {empty_text(@search)}
                   </td>
                 </tr>
@@ -70,6 +81,9 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     data-link-row
                     class="border-b border-base-content/10 hover:bg-base-200"
                   >
+                    <td class="w-8">
+                      <Bulk.row_checkbox link={link} selected={@selected} />
+                    </td>
                     <td class="whitespace-nowrap">
                       <button
                         type="button"
@@ -106,7 +120,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     </td>
                   </tr>
                   <tr :if={@edit_id == link.id} id={"edit-#{link.id}"}>
-                    <td colspan="5" class="bg-base-200/60 font-sans">
+                    <td colspan="6" class="bg-base-200/60 font-sans">
                       <.edit_panel edit_form={@edit_form} />
                     </td>
                   </tr>

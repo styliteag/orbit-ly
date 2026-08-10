@@ -9,6 +9,7 @@ defmodule OrbitlyWeb.LinksLive.Shared do
 
   use OrbitlyWeb, :html
 
+  alias OrbitlyWeb.LinksLive.Bulk
   alias Phoenix.LiveView.JS
 
   def short_url(link), do: OrbitlyWeb.ShortUrl.for_link(link)
@@ -81,21 +82,26 @@ defmodule OrbitlyWeb.LinksLive.Shared do
   attr :page, :integer, required: true
   attr :max_page, :integer, required: true
   attr :page_size, :integer, required: true
+  attr :visible, :list, required: true
+  attr :selected, :any, required: true
   attr :class, :string, default: nil
 
   def list_controls(assigns) do
     ~H"""
     <div class={["flex flex-wrap items-center justify-between gap-3", @class]}>
-      <form id="search-form" phx-change="search" phx-submit="search">
-        <input
-          type="search"
-          name="q"
-          value={@search}
-          placeholder="Search…"
-          phx-debounce="200"
-          class="input input-sm w-56"
-        />
-      </form>
+      <div class="flex items-center gap-3">
+        <Bulk.select_all_checkbox visible={@visible} selected={@selected} />
+        <form id="search-form" phx-change="search" phx-submit="search">
+          <input
+            type="search"
+            name="q"
+            value={@search}
+            placeholder="Search…"
+            phx-debounce="200"
+            class="input input-sm w-56"
+          />
+        </form>
+      </div>
       <div class="flex items-center gap-3 text-sm">
         <span :if={@search == ""} class="opacity-60">Total links: <b>{@total}</b></span>
         <span :if={@search != ""} class="opacity-60">
