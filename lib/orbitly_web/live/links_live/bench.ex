@@ -97,7 +97,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     sort_dir={@sort_dir}
                     class="text-right"
                   />
-                  <th></th>
+                  <th class="sticky right-0 bg-base-100"></th>
                 </tr>
               </thead>
               <tbody class="brand-mono text-[13px]">
@@ -131,7 +131,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                       </button>
                       <.link_badges link={link} />
                     </td>
-                    <td class="max-w-md">
+                    <td class="max-w-xs">
                       <a
                         href={link.target_url}
                         target="_blank"
@@ -145,7 +145,7 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     </td>
                     <td
                       :if={@current_user.admin}
-                      class="max-w-[12rem] truncate opacity-70"
+                      class="max-w-[8rem] truncate opacity-70"
                       title={link.owner && link.owner.email}
                     >
                       {link.owner && link.owner.email}
@@ -156,13 +156,8 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                     <td class="text-right tabular-nums font-semibold">
                       {Map.get(@click_counts, link.id, 0)}
                     </td>
-                    <td>
-                      <.row_actions
-                        link={link}
-                        list_query={@list_query}
-                        domains={@domains}
-                        dup_id={@dup_id}
-                      />
+                    <td class="sticky right-0 bg-base-100">
+                      <.row_actions link={link} list_query={@list_query} />
                     </td>
                   </tr>
                   <tr :if={@edit_id == link.id} id={"edit-#{link.id}"}>
@@ -171,6 +166,14 @@ defmodule OrbitlyWeb.LinksLive.Bench do
                       class="bg-base-200/60 font-sans"
                     >
                       <.edit_panel edit_form={@edit_form} />
+                    </td>
+                  </tr>
+                  <tr :if={@dup_id == link.id} id={"duplicate-row-#{link.id}"}>
+                    <td
+                      colspan={if @current_user.admin, do: "7", else: "6"}
+                      class="bg-base-200/60 font-sans px-3"
+                    >
+                      <.duplicate_panel link={link} domains={@domains} />
                     </td>
                   </tr>
                 <% end %>

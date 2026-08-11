@@ -140,10 +140,13 @@ defmodule OrbitlyWeb.LinksLive.Soft do
                 </p>
                 <p class="text-xs opacity-40">views</p>
               </div>
-              <.row_actions link={link} list_query={@list_query} domains={@domains} dup_id={@dup_id} />
+              <.row_actions link={link} list_query={@list_query} />
             </div>
             <div :if={@edit_id == link.id} class="mt-3 rounded-box bg-base-200/60 px-4">
               <.edit_panel edit_form={@edit_form} />
+            </div>
+            <div :if={@dup_id == link.id} class="mt-3 rounded-box bg-base-200/60 px-4">
+              <.duplicate_panel link={link} domains={@domains} />
             </div>
           </div>
         </section>

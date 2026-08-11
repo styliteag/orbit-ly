@@ -326,8 +326,8 @@ button.copied .copy-done { display: inline-block; }
   align-items: center;
   gap: 1rem;
 }
-.links-grid-orbit { grid-template-columns: 1.25rem minmax(0, 1fr) 6rem 6rem 9rem; }
-.links-grid-soft  { grid-template-columns: 1.25rem minmax(0, 1fr) 5rem 9rem; }
+.links-grid-orbit { grid-template-columns: 1.25rem minmax(0, 1fr) 6rem 6rem 11rem; }
+.links-grid-soft  { grid-template-columns: 1.25rem minmax(0, 1fr) 5rem 11rem; }
 
 /* Chart hover columns (OrbitlyWeb.Charts): invisible hit areas that tint on
    hover and carry an SVG <title> as the tooltip — no JS, no CSP nonce. */

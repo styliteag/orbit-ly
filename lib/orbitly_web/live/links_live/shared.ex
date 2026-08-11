@@ -229,9 +229,6 @@ defmodule OrbitlyWeb.LinksLive.Shared do
     default: "",
     doc: "current list state (scope, sorting, …) so the stats page can come back to it"
 
-  attr :domains, :list, default: []
-  attr :dup_id, :any, default: nil
-
   def row_actions(assigns) do
     ~H"""
     <div class="whitespace-nowrap text-right">
@@ -284,24 +281,38 @@ defmodule OrbitlyWeb.LinksLive.Shared do
       >
         <.icon name="hero-trash" class="w-4 h-4 text-error" />
       </button>
-
-      <form
-        :if={@dup_id == @link.id}
-        id={"duplicate-form-#{@link.id}"}
-        phx-submit="row-duplicate-submit"
-        class="mt-2 flex items-center justify-end gap-2"
-      >
-        <input type="hidden" name="link_id" value={@link.id} />
-        <select name="domain_id" class="select select-xs w-48" aria-label="Duplicate to domain">
-          <option value="">Duplicate to…</option>
-          <option :for={domain <- @domains} value={domain.id}>{domain.hostname}</option>
-        </select>
-        <button type="submit" class="btn btn-xs" phx-disable-with="Duplicating…">Go</button>
-        <button type="button" class="btn btn-xs btn-ghost" phx-click="cancel-duplicate">
-          Cancel
-        </button>
-      </form>
     </div>
+    """
+  end
+
+  @doc """
+  Inline "duplicate to another domain" panel — rendered full-width below the row
+  (like `edit_panel`) so the domain picker is not squeezed into the narrow
+  actions column. Submits one id to the same `duplicate_links/3` as the bulk bar.
+  """
+  attr :link, :map, required: true
+  attr :domains, :list, required: true
+
+  def duplicate_panel(assigns) do
+    ~H"""
+    <form
+      id={"duplicate-form-#{@link.id}"}
+      phx-submit="row-duplicate-submit"
+      class="flex flex-wrap items-center gap-2 py-3"
+    >
+      <input type="hidden" name="link_id" value={@link.id} />
+      <span class="text-sm font-semibold">Duplicate to:</span>
+      <select name="domain_id" class="select select-sm w-56" aria-label="Duplicate to domain">
+        <option value="">Choose a domain…</option>
+        <option :for={domain <- @domains} value={domain.id}>{domain.hostname}</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-primary" phx-disable-with="Duplicating…">
+        <.icon name="hero-document-duplicate" class="w-4 h-4" /> Duplicate
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" phx-click="cancel-duplicate">
+        Cancel
+      </button>
+    </form>
     """
   end
 
