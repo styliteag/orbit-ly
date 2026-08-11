@@ -68,6 +68,13 @@ defmodule OrbitlyWeb.LinksLive.Shared do
           <option value="days" selected>days</option>
         </select>
       </div>
+      <div class="flex items-end">
+        <.input
+          type="checkbox"
+          field={@form[:interstitial]}
+          label="Preview page before redirect"
+        />
+      </div>
       <div class="sm:col-span-2">
         <.input field={@form[:description]} label="Description:" placeholder="Description…" />
       </div>
@@ -180,12 +187,15 @@ defmodule OrbitlyWeb.LinksLive.Shared do
     """
   end
 
-  @doc "Password-lock and expiry badges for a link."
+  @doc "Password-lock, preview and expiry badges for a link."
   attr :link, :map, required: true
 
   def link_badges(assigns) do
     ~H"""
     <.icon :if={@link.password_hash} name="hero-lock-closed" class="w-3.5 h-3.5 opacity-50" />
+    <span :if={@link.interstitial} title="Shows a preview page before redirecting">
+      <.icon name="hero-eye" class="w-3.5 h-3.5 opacity-50" />
+    </span>
     <span :if={@link.expires_at} class="text-xs opacity-50" title={@link.expires_at}>
       {OrbitlyWeb.RelativeTime.until(@link.expires_at)}
     </span>
@@ -218,6 +228,9 @@ defmodule OrbitlyWeb.LinksLive.Shared do
   attr :list_query, :string,
     default: "",
     doc: "current list state (scope, sorting, …) so the stats page can come back to it"
+
+  attr :domains, :list, default: []
+  attr :dup_id, :any, default: nil
 
   def row_actions(assigns) do
     ~H"""
@@ -253,6 +266,16 @@ defmodule OrbitlyWeb.LinksLive.Shared do
       <button
         type="button"
         class="btn btn-ghost btn-xs"
+        title="Duplicate to another domain"
+        aria-label="Duplicate"
+        phx-click="row-duplicate"
+        phx-value-id={@link.id}
+      >
+        <.icon name="hero-document-duplicate" class="w-4 h-4 text-info" />
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
         title="Delete"
         aria-label="Delete"
         phx-click="delete"
@@ -261,11 +284,28 @@ defmodule OrbitlyWeb.LinksLive.Shared do
       >
         <.icon name="hero-trash" class="w-4 h-4 text-error" />
       </button>
+
+      <form
+        :if={@dup_id == @link.id}
+        id={"duplicate-form-#{@link.id}"}
+        phx-submit="row-duplicate-submit"
+        class="mt-2 flex items-center justify-end gap-2"
+      >
+        <input type="hidden" name="link_id" value={@link.id} />
+        <select name="domain_id" class="select select-xs w-48" aria-label="Duplicate to domain">
+          <option value="">Duplicate to…</option>
+          <option :for={domain <- @domains} value={domain.id}>{domain.hostname}</option>
+        </select>
+        <button type="submit" class="btn btn-xs" phx-disable-with="Duplicating…">Go</button>
+        <button type="button" class="btn btn-xs btn-ghost" phx-click="cancel-duplicate">
+          Cancel
+        </button>
+      </form>
     </div>
     """
   end
 
-  @doc "Inline edit form (target, password, expiry, description)."
+  @doc "Inline edit form (target, password, expiry, preview, description)."
   attr :edit_form, Phoenix.HTML.Form, required: true
 
   def edit_panel(assigns) do
@@ -304,6 +344,13 @@ defmodule OrbitlyWeb.LinksLive.Shared do
             <option value="hours">hours</option>
             <option value="days" selected>days</option>
           </select>
+        </div>
+        <div class="flex items-end">
+          <.input
+            type="checkbox"
+            field={@edit_form[:interstitial]}
+            label="Preview page before redirect"
+          />
         </div>
         <div class="sm:col-span-2">
           <.input field={@edit_form[:description]} label="Description:" />

@@ -42,6 +42,17 @@ docker compose run --rm app mix precommit   # before every commit
   `RedirectCache` (ETS, read-through in the caller process, 60s TTL; plain Ecto
   queries). Invalidation: the `Orbitly.Shortener` context flushes `RedirectCache`
   directly on every domain/link mutation.
+- **Per-link preview (interstitial) redirect** (`links.interstitial` boolean,
+  default false): when set, `Redirector.redirect_to_target/2` renders a
+  transparent HTML preview (destination shown, manual `<a href>` to continue,
+  NO `Location` header, no meta-refresh, no script — so a security appliance
+  sees a page with nothing to auto-follow) instead of the bare 302. The click
+  is counted on that render (the link points straight at the target). The
+  `target_url` is `Plug.HTML.html_escape`d (user-controlled). The flag rides
+  through the whole path: `RedirectCache.load_link` selects it, both link
+  changesets cast it, `duplicate_links` copies it, the create/edit forms carry
+  a checkbox and `link_badges` shows a `hero-eye` icon. Reason for per-link (not
+  a global env flag): only some customers' appliances block the auto-redirect.
 - **Click events are NEVER written one by one**: only via `ClickBuffer`
   (batch `insert_all`), otherwise SQLite's single writer blocks the hot path.
   Stats are plain Ecto group-by queries (`ClickStats`, `Shortener.click_counts/1`).
@@ -96,8 +107,9 @@ docker compose run --rm app mix precommit   # before every commit
   multi-select in `LinksLive.Bulk`, column sorting in `LinksLive.Sort`) —
   event names and ids (`link-form`, `search-form`, `advanced-options`,
   `edit-form`, `link-<id>`, `bulk-bar`, `bulk-reassign-form`,
-  `bulk-duplicate-form`, `toggle-select`, `toggle-select-page`,
-  `bulk-delete`, `bulk-reassign`, `bulk-duplicate`,
+  `bulk-duplicate-form`, `duplicate-form-<id>`, `toggle-select`,
+  `toggle-select-page`, `bulk-delete`, `bulk-reassign`, `bulk-duplicate`,
+  `row-duplicate`, `row-duplicate-submit`, `cancel-duplicate`,
   `scope`, `sort`) are the contract; a new design must render the row
   checkbox, the bulk bar and exactly one sort control (`Sort.sort_menu` for
   list designs *or* `Sort.sort_header` cells for a table — never both, the

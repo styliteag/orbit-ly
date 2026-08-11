@@ -27,6 +27,8 @@ defmodule Orbitly.Shortener.Link do
     field :description, :string
     field :expires_at, :utc_datetime
     field :password_hash, :string, redact: true
+    # Render the preview (interstitial) page instead of a bare 302 redirect.
+    field :interstitial, :boolean, default: false
     field :owner_id, Ecto.UUID
     # Owner lives in Accounts (still Ash); the context attaches it here for
     # display instead of a cross-framework Ecto preload.
@@ -44,7 +46,15 @@ defmodule Orbitly.Shortener.Link do
   """
   def create_changeset(link, attrs) do
     link
-    |> cast(attrs, [:target_url, :description, :expires_at, :domain_id, :owner_id, :password_hash])
+    |> cast(attrs, [
+      :target_url,
+      :description,
+      :expires_at,
+      :domain_id,
+      :owner_id,
+      :password_hash,
+      :interstitial
+    ])
     # slug is resolved (custom, special or generated) by the context; set it via
     # put_change so the root link's stored "" survives cast's empty-value pruning.
     |> put_slug(attrs)
@@ -72,7 +82,7 @@ defmodule Orbitly.Shortener.Link do
   """
   def update_changeset(link, attrs) do
     link
-    |> cast(attrs, [:target_url, :description, :expires_at, :password_hash])
+    |> cast(attrs, [:target_url, :description, :expires_at, :password_hash, :interstitial])
     |> validate_required([:target_url])
     |> validate_length(:description, max: 500)
     |> validate_target_url()

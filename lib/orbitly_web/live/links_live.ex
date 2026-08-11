@@ -37,6 +37,7 @@ defmodule OrbitlyWeb.LinksLive do
      |> assign(:edit_id, nil)
      |> assign(:edit_link, nil)
      |> assign(:edit_form, nil)
+     |> assign(:dup_id, nil)
      |> assign(:selected, MapSet.new())
      |> load_domains()
      |> load_reassign_targets()
@@ -157,7 +158,8 @@ defmodule OrbitlyWeb.LinksLive do
          socket
          |> assign(:edit_id, id)
          |> assign(:edit_link, link)
-         |> assign(:edit_form, to_form(changeset, as: "edit"))}
+         |> assign(:edit_form, to_form(changeset, as: "edit"))
+         |> assign(:dup_id, nil)}
 
       _ ->
         {:noreply, socket}
@@ -167,6 +169,42 @@ defmodule OrbitlyWeb.LinksLive do
   def handle_event("cancel-edit", _params, socket) do
     {:noreply,
      socket |> assign(:edit_id, nil) |> assign(:edit_link, nil) |> assign(:edit_form, nil)}
+  end
+
+  # Per-row duplicate: opens an inline domain picker (mirrors the edit panel);
+  # submit reuses the same `duplicate_links/3` as the bulk bar, with one id.
+  def handle_event("row-duplicate", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:dup_id, id)
+     |> assign(:edit_id, nil)
+     |> assign(:edit_link, nil)
+     |> assign(:edit_form, nil)}
+  end
+
+  def handle_event("cancel-duplicate", _params, socket) do
+    {:noreply, assign(socket, :dup_id, nil)}
+  end
+
+  def handle_event("row-duplicate-submit", %{"domain_id" => ""}, socket) do
+    {:noreply, put_flash(socket, :error, "Pick a domain to duplicate to")}
+  end
+
+  def handle_event("row-duplicate-submit", %{"link_id" => id, "domain_id" => domain_id}, socket) do
+    case Shortener.duplicate_links([id], domain_id, socket.assigns.current_user) do
+      {:ok, count, skipped} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, duplicate_flash(count, skipped, domain_hostname(socket, domain_id)))
+         |> assign(:dup_id, nil)
+         |> load_links()}
+
+      {:error, :invalid_domain} ->
+        {:noreply, put_flash(socket, :error, "Unknown domain")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not duplicate the link")}
+    end
   end
 
   def handle_event("edit-validate", %{"edit" => params}, socket) do

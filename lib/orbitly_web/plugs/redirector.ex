@@ -119,11 +119,59 @@ defmodule OrbitlyWeb.Redirector do
   defp redirect_to_target(conn, link) do
     track_click(conn, link)
 
+    if link.interstitial, do: interstitial(conn, link), else: send_redirect(conn, link)
+  end
+
+  defp send_redirect(conn, link) do
     conn
     |> put_resp_header("location", link.target_url)
     |> put_resp_header("cache-control", "no-store")
     |> send_resp(302, "")
     |> halt()
+  end
+
+  # Transparent preview: plain HTML with the destination shown and a manual
+  # "continue" link — NO Location header, no meta-refresh, no script. A security
+  # appliance sees a page, not an auto-redirect it has to follow (ADR-0003
+  # refinement). The click is already counted (`track_click` above), so the
+  # link points straight at the target and no second request is needed.
+  defp interstitial(conn, link) do
+    conn
+    |> put_resp_content_type("text/html")
+    |> put_resp_header("cache-control", "no-store")
+    |> send_resp(200, interstitial_body(link.target_url))
+    |> halt()
+  end
+
+  defp interstitial_body(target_url) do
+    target = Plug.HTML.html_escape(target_url)
+    host = target_url |> URI.parse() |> Map.get(:host) |> to_string() |> Plug.HTML.html_escape()
+
+    """
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex">
+        <title>You are being redirected</title>
+        <style>
+          body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto;
+                 padding: 0 1.5rem; line-height: 1.5; }
+          .target { word-break: break-all; font-weight: 600; }
+          .go { display: inline-block; margin-top: 1.5rem; padding: 0.6rem 1.25rem;
+                border: 1px solid currentColor; border-radius: 0.5rem;
+                text-decoration: none; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <h1>You are being redirected</h1>
+        <p>This link takes you to <span class="target">#{host}</span>:</p>
+        <p class="target">#{target}</p>
+        <a class="go" href="#{target}" rel="noopener noreferrer nofollow">Continue to #{host}</a>
+      </body>
+    </html>
+    """
   end
 
   defp track_click(conn, link) do

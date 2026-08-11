@@ -174,7 +174,12 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
                   <span class="badge badge-outline border-primary/40 text-primary tabular-nums whitespace-nowrap justify-self-end">
                     {Map.get(@click_counts, link.id, 0)} views
                   </span>
-                  <.row_actions link={link} list_query={@list_query} />
+                  <.row_actions
+                    link={link}
+                    list_query={@list_query}
+                    domains={@domains}
+                    dup_id={@dup_id}
+                  />
                 </div>
                 <div :if={@edit_id == link.id} class="mt-3 rounded-box bg-base-300/50 px-4">
                   <.edit_panel edit_form={@edit_form} />

@@ -97,7 +97,7 @@ defmodule Orbitly.Shortener do
   def change_link(%Link{} = link, attrs, actor) do
     params =
       attrs
-      |> take_present([:target_url, :expires_at, :domain_id, :description])
+      |> take_present([:target_url, :expires_at, :domain_id, :description, :interstitial])
       |> Map.put(:owner_id, actor && actor.id)
       |> maybe_put_slug(preview_slug(field(attrs, :slug)))
 
@@ -116,7 +116,7 @@ defmodule Orbitly.Shortener do
           {:ok, slug} ->
             params =
               attrs
-              |> take_present([:target_url, :expires_at, :domain_id, :description])
+              |> take_present([:target_url, :expires_at, :domain_id, :description, :interstitial])
               |> Map.put(:slug, slug)
               |> Map.put(:owner_id, actor.id)
               |> Map.put(:password_hash, hash_password(field(attrs, :password)))
@@ -148,7 +148,7 @@ defmodule Orbitly.Shortener do
     if can_access_link?(link, actor) do
       params =
         attrs
-        |> take_present([:target_url, :expires_at, :description])
+        |> take_present([:target_url, :expires_at, :description, :interstitial])
         |> put_password_hash(field(attrs, :password))
 
       link
@@ -344,6 +344,7 @@ defmodule Orbitly.Shortener do
       description: l.description,
       expires_at: l.expires_at,
       password_hash: l.password_hash,
+      interstitial: l.interstitial,
       owner_id: l.owner_id
     })
     |> Repo.all()

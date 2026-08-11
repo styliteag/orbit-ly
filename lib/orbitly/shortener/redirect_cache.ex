@@ -28,7 +28,7 @@ defmodule Orbitly.Shortener.RedirectCache do
     lookup({:domain, host}, fn -> load_domain(host) end)
   end
 
-  @doc "Returns {:ok, %{link_id, target_url, expires_at, password_hash}} or :not_found."
+  @doc "Returns {:ok, %{link_id, target_url, expires_at, password_hash, interstitial}} or :not_found."
   def fetch_link(host, slug) when is_binary(host) and is_binary(slug) do
     lookup({:link, host, slug}, fn -> load_link(host, slug) end)
   end
@@ -161,7 +161,8 @@ defmodule Orbitly.Shortener.RedirectCache do
           link_id: l.id,
           target_url: l.target_url,
           expires_at: l.expires_at,
-          password_hash: l.password_hash
+          password_hash: l.password_hash,
+          interstitial: l.interstitial
         }
       )
 

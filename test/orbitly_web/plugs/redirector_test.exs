@@ -240,6 +240,80 @@ defmodule OrbitlyWeb.RedirectorTest do
     end
   end
 
+  describe "interstitial (preview) links" do
+    test "renders a preview page instead of a 302 when enabled", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "preview",
+        target_url: "https://example.org/deep",
+        interstitial: true
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/preview")
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "location") == []
+      assert conn.resp_body =~ "being redirected"
+      assert conn.resp_body =~ "https://example.org/deep"
+      assert conn.resp_body =~ "example.org"
+    end
+
+    test "a link without the flag still 302s", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "plain",
+        target_url: "https://example.org/x"
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/plain")
+
+      assert conn.status == 302
+      assert get_resp_header(conn, "location") == ["https://example.org/x"]
+    end
+
+    test "still records the click", ctx do
+      Orbitly.Shortener.ClickBuffer.flush_now()
+      link = link_fixture(ctx.user, ctx.redirect_domain, %{slug: "peek", interstitial: true})
+      admin = admin_fixture()
+
+      build_conn() |> on_host(@redirect_host) |> get("/peek")
+      Orbitly.Shortener.ClickBuffer.flush_now()
+
+      assert [event] = Shortener.list_click_events(admin)
+      assert event.link_id == link.id
+    end
+
+    test "escapes the target url in the page (no injection)", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "xss",
+        target_url: "https://evil.example/\"><script>alert(1)</script>",
+        interstitial: true
+      })
+
+      conn = build_conn() |> on_host(@redirect_host) |> get("/xss")
+
+      assert conn.status == 200
+      refute conn.resp_body =~ "<script>alert(1)</script>"
+      assert conn.resp_body =~ "&lt;script&gt;"
+    end
+
+    test "a password-protected preview link shows the preview after unlock", ctx do
+      link_fixture(ctx.user, ctx.redirect_domain, %{
+        slug: "locked-preview",
+        target_url: "https://example.org/vault",
+        password_hash: Bcrypt.hash_pwd_salt("open"),
+        interstitial: true
+      })
+
+      conn =
+        build_conn()
+        |> on_host(@redirect_host)
+        |> post("/locked-preview", %{"password" => "open"})
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "location") == []
+      assert conn.resp_body =~ "being redirected"
+    end
+  end
+
   describe "cache invalidation" do
     test "link updates through Ash invalidate the cache", ctx do
       {:ok, link} =

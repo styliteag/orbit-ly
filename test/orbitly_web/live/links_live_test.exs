@@ -30,6 +30,24 @@ defmodule OrbitlyWeb.LinksLiveTest do
     assert html =~ "https://example.org/target"
   end
 
+  test "creates a link with the preview flag set", %{conn: conn, user: user, domain: domain} do
+    {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+    view
+    |> form("#link-form", %{
+      "form" => %{
+        "domain_id" => domain.id,
+        "slug" => "with-preview",
+        "target_url" => "https://example.org/target",
+        "interstitial" => "true"
+      }
+    })
+    |> render_submit()
+
+    assert [link] = Orbitly.Shortener.list_links(user)
+    assert link.interstitial == true
+  end
+
   test "shows validation errors without creating anything", %{
     conn: conn,
     user: user,
@@ -104,7 +122,9 @@ defmodule OrbitlyWeb.LinksLiveTest do
     })
     |> render_submit()
 
-    refute view |> element("#advanced-options") |> render() =~ "hidden"
+    # the collapse toggles a `hidden` class on the wrapper — match it as a class
+    # token so the interstitial checkbox's `type="hidden"` fallback is ignored.
+    refute view |> element("#advanced-options") |> render() =~ ~r/class="[^"]*\bhidden\b/
     assert render(view) =~ "has already been taken"
   end
 
@@ -310,6 +330,28 @@ defmodule OrbitlyWeb.LinksLiveTest do
 
       assert render(view) =~ "2 links duplicated to fresh.example"
       assert Enum.count(Orbitly.Shortener.list_links(user), &(&1.domain_id == target.id)) == 2
+    end
+
+    test "duplicates a single link from its row action", %{conn: conn, user: user, domain: domain} do
+      target = domain_fixture(%{hostname: "row-fresh.example"})
+      link = link_fixture(user, domain, %{slug: "row-dup", target_url: "https://example.org/x"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      # the inline picker is hidden until the row's duplicate button is clicked
+      refute has_element?(view, "#duplicate-form-#{link.id}")
+
+      view
+      |> element(~s{[phx-click="row-duplicate"][phx-value-id="#{link.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#duplicate-form-#{link.id}")
+
+      view |> form("#duplicate-form-#{link.id}", %{"domain_id" => target.id}) |> render_submit()
+
+      assert render(view) =~ "1 link duplicated to row-fresh.example"
+      assert Enum.count(Orbitly.Shortener.list_links(user), &(&1.domain_id == target.id)) == 1
+      refute has_element?(view, "#duplicate-form-#{link.id}")
     end
 
     test "the bar disappears once the selection is empty", %{

@@ -148,6 +148,31 @@ defmodule Orbitly.Shortener.LinkTest do
 
       assert Bcrypt.verify_pass("hunter22", link.password_hash)
     end
+
+    test "defaults the interstitial flag to false", ctx do
+      assert {:ok, link} =
+               Shortener.create_link(
+                 %{slug: "plain", target_url: "https://example.com", domain_id: ctx.domain.id},
+                 ctx.user
+               )
+
+      assert link.interstitial == false
+    end
+
+    test "stores the interstitial flag when set", ctx do
+      assert {:ok, link} =
+               Shortener.create_link(
+                 %{
+                   slug: "preview",
+                   target_url: "https://example.com",
+                   domain_id: ctx.domain.id,
+                   interstitial: true
+                 },
+                 ctx.user
+               )
+
+      assert link.interstitial == true
+    end
   end
 
   describe "authorization" do
@@ -193,6 +218,16 @@ defmodule Orbitly.Shortener.LinkTest do
 
       assert {:ok, _} =
                Shortener.update_link(updated, %{target_url: "https://admin.example"}, ctx.admin)
+    end
+
+    test "update toggles the interstitial flag", ctx do
+      link = link_fixture(ctx.user, ctx.domain, %{interstitial: false})
+
+      assert {:ok, on} = Shortener.update_link(link, %{interstitial: true}, ctx.user)
+      assert on.interstitial == true
+
+      assert {:ok, off} = Shortener.update_link(on, %{interstitial: false}, ctx.user)
+      assert off.interstitial == false
     end
 
     test "owner can destroy their link", ctx do
