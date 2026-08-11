@@ -286,6 +286,29 @@ defmodule OrbitlyWeb.LinksLive do
     end
   end
 
+  def handle_event("bulk-duplicate", %{"domain_id" => ""}, socket) do
+    {:noreply, put_flash(socket, :error, "Pick a domain to duplicate to")}
+  end
+
+  def handle_event("bulk-duplicate", %{"domain_id" => domain_id}, socket) do
+    ids = MapSet.to_list(socket.assigns.selected)
+
+    case Shortener.duplicate_links(ids, domain_id, socket.assigns.current_user) do
+      {:ok, count, skipped} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, duplicate_flash(count, skipped, domain_hostname(socket, domain_id)))
+         |> assign(:selected, MapSet.new())
+         |> load_links()}
+
+      {:error, :invalid_domain} ->
+        {:noreply, put_flash(socket, :error, "Unknown domain")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not duplicate the selected links")}
+    end
+  end
+
   # A destructive action must never act on rows the user cannot see: searching
   # or paging away from a selected row drops it from the selection.
   defp prune_selection(socket) do
@@ -300,6 +323,21 @@ defmodule OrbitlyWeb.LinksLive do
     case Enum.find(socket.assigns.users, &(&1.id == owner_id)) do
       %{email: email} -> email
       _ -> "another user"
+    end
+  end
+
+  defp duplicate_flash(count, 0, host),
+    do: "#{count} #{pluralize(count, "link")} duplicated to #{host}"
+
+  defp duplicate_flash(count, skipped, host),
+    do:
+      "#{count} #{pluralize(count, "link")} duplicated to #{host}, " <>
+        "#{skipped} skipped (slug already exists)"
+
+  defp domain_hostname(socket, domain_id) do
+    case Enum.find(socket.assigns.domains, &(&1.id == domain_id)) do
+      %{hostname: hostname} -> hostname
+      _ -> "the domain"
     end
   end
 

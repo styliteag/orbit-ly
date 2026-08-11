@@ -124,6 +124,7 @@ defmodule OrbitlyWeb.LinksLive.Orbit do
             <Bulk.bulk_bar
               selected={@selected}
               users={@users}
+              domains={@domains}
               current_user={@current_user}
               class="px-4 py-2 border-b border-base-content/10"
             />

@@ -4,7 +4,7 @@ defmodule Orbitly.Shortener.BulkTest do
   import Orbitly.Fixtures
 
   alias Orbitly.Shortener
-  alias Orbitly.Shortener.ClickEvent
+  alias Orbitly.Shortener.{ClickEvent, RedirectCache}
 
   setup do
     %{
@@ -132,6 +132,150 @@ defmodule Orbitly.Shortener.BulkTest do
 
       assert [moved] = Shortener.list_links(ctx.other)
       assert DateTime.compare(moved.updated_at, link.updated_at) == :gt
+    end
+  end
+
+  describe "duplicate_links/3" do
+    test "copies the links onto the target domain, leaving the originals", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain, %{slug: "keep"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+
+      links = Shortener.list_links(ctx.user)
+      assert length(links) == 2
+      assert Enum.count(links, &(&1.domain_id == ctx.domain.id)) == 1
+      assert Enum.count(links, &(&1.domain_id == target.id)) == 1
+      assert Enum.all?(links, &(&1.slug == "keep"))
+    end
+
+    test "the copy is a new row, not a moved one", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain, %{slug: "dup"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+
+      copy = Enum.find(Shortener.list_links(ctx.user), &(&1.domain_id == target.id))
+      refute copy.id == link.id
+    end
+
+    test "skips slugs already present on the target domain", ctx do
+      target = domain_fixture()
+      a = link_fixture(ctx.user, ctx.domain, %{slug: "free"})
+      b = link_fixture(ctx.user, ctx.domain, %{slug: "taken"})
+      _clash = link_fixture(ctx.user, target, %{slug: "taken"})
+
+      assert {:ok, 1, 1} = Shortener.duplicate_links([a.id, b.id], target.id, ctx.user)
+      assert Enum.count(Shortener.list_links(ctx.user), &(&1.domain_id == target.id)) == 2
+    end
+
+    test "carries password protection and expiry over to the copy", ctx do
+      target = domain_fixture()
+      expires = DateTime.add(DateTime.utc_now(), 3600, :second)
+
+      link =
+        link_fixture(ctx.user, ctx.domain, %{
+          slug: "secret",
+          password_hash: "$2b$fakehash",
+          expires_at: expires
+        })
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+
+      copy = Enum.find(Shortener.list_links(ctx.user), &(&1.domain_id == target.id))
+      assert copy.password_hash == "$2b$fakehash"
+      assert copy.expires_at
+    end
+
+    test "keeps the original owner when an admin duplicates another user's link", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.other, ctx.domain, %{slug: "theirs"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.admin)
+
+      copy = Enum.find(Shortener.list_links(ctx.admin), &(&1.domain_id == target.id))
+      assert copy.owner_id == ctx.other.id
+    end
+
+    test "does not copy the click history", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain, %{slug: "clicked"})
+
+      Repo.insert!(
+        struct(ClickEvent, %{
+          link_id: link.id,
+          occurred_at: DateTime.utc_now(),
+          ip: "203.0.113.9"
+        })
+      )
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+      assert length(Shortener.list_click_events(ctx.admin)) == 1
+    end
+
+    test "the copy resolves on the redirect hot path", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain, %{slug: "hot"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+
+      assert {:ok, resolved} = RedirectCache.fetch_link(target.hostname, "hot")
+      assert resolved.target_url == link.target_url
+    end
+
+    test "never copies another user's link", ctx do
+      target = domain_fixture()
+      mine = link_fixture(ctx.user, ctx.domain, %{slug: "mine"})
+      theirs = link_fixture(ctx.other, ctx.domain, %{slug: "theirs"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([mine.id, theirs.id], target.id, ctx.user)
+      assert Enum.count(Shortener.list_links(ctx.user), &(&1.domain_id == target.id)) == 1
+    end
+
+    test "a normal user may duplicate their own links", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain, %{slug: "ok"})
+
+      assert {:ok, 1, 0} = Shortener.duplicate_links([link.id], target.id, ctx.user)
+    end
+
+    test "rejects an anonymous caller", ctx do
+      target = domain_fixture()
+      link = link_fixture(ctx.user, ctx.domain)
+
+      assert {:error, :unauthorized} = Shortener.duplicate_links([link.id], target.id, nil)
+    end
+
+    test "rejects an unknown target domain", ctx do
+      link = link_fixture(ctx.user, ctx.domain)
+
+      assert {:error, :invalid_domain} =
+               Shortener.duplicate_links([link.id], Ecto.UUID.generate(), ctx.user)
+    end
+
+    test "rejects an inactive target domain", ctx do
+      target = domain_fixture(%{active: false})
+      link = link_fixture(ctx.user, ctx.domain)
+
+      assert {:error, :invalid_domain} =
+               Shortener.duplicate_links([link.id], target.id, ctx.user)
+    end
+
+    test "rejects a malformed target domain id", ctx do
+      link = link_fixture(ctx.user, ctx.domain)
+
+      assert {:error, :invalid_domain} = Shortener.duplicate_links([link.id], "nope", ctx.user)
+    end
+
+    test "ignores malformed and unknown link ids", ctx do
+      target = domain_fixture()
+
+      assert {:ok, 0, 0} =
+               Shortener.duplicate_links(
+                 ["not-a-uuid", Ecto.UUID.generate()],
+                 target.id,
+                 ctx.user
+               )
     end
   end
 end

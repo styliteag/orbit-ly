@@ -291,6 +291,27 @@ defmodule OrbitlyWeb.LinksLiveTest do
       assert survivor.id == keep.id
     end
 
+    test "duplicates the selected links onto another domain", %{
+      conn: conn,
+      user: user,
+      domain: domain
+    } do
+      target = domain_fixture(%{hostname: "fresh.example"})
+      a = link_fixture(user, domain, %{slug: "dup-a"})
+      b = link_fixture(user, domain, %{slug: "dup-b"})
+
+      {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+      for id <- [a.id, b.id] do
+        view |> element(~s{[phx-click="toggle-select"][phx-value-id="#{id}"]}) |> render_click()
+      end
+
+      view |> form("#bulk-duplicate-form", %{"domain_id" => target.id}) |> render_submit()
+
+      assert render(view) =~ "2 links duplicated to fresh.example"
+      assert Enum.count(Orbitly.Shortener.list_links(user), &(&1.domain_id == target.id)) == 2
+    end
+
     test "the bar disappears once the selection is empty", %{
       conn: conn,
       user: user,

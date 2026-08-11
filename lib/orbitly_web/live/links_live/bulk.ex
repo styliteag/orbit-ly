@@ -6,8 +6,9 @@ defmodule OrbitlyWeb.LinksLive.Bulk do
 
   Design-neutral like `LinksLive.Shared` — semantic daisyUI classes only. The
   event names (`toggle-select`, `toggle-select-page`, `clear-selection`,
-  `bulk-delete`, `bulk-reassign`) and the `bulk-bar` / `bulk-reassign-form` ids
-  are part of the LiveView contract across all three designs.
+  `bulk-delete`, `bulk-reassign`, `bulk-duplicate`) and the `bulk-bar` /
+  `bulk-reassign-form` / `bulk-duplicate-form` ids are part of the LiveView
+  contract across all three designs.
   """
 
   use OrbitlyWeb, :html
@@ -49,10 +50,12 @@ defmodule OrbitlyWeb.LinksLive.Bulk do
   @doc """
   Action bar for the current selection. Hidden while nothing is selected.
   Reassignment is admin-only — a normal user must not see the account list
-  (no open registration, ADR-0006).
+  (no open registration, ADR-0006). Duplication onto another domain is open to
+  everyone: it exposes only domains, which the create form already shows.
   """
   attr :selected, :any, required: true
   attr :users, :list, required: true
+  attr :domains, :list, required: true
   attr :current_user, :map, required: true
   attr :class, :string, default: nil
 
@@ -84,6 +87,16 @@ defmodule OrbitlyWeb.LinksLive.Bulk do
         </select>
         <button type="submit" class="btn btn-xs" phx-disable-with="Moving…">
           <.icon name="hero-arrow-right-circle" class="w-3.5 h-3.5" /> Reassign
+        </button>
+      </form>
+
+      <form id="bulk-duplicate-form" phx-submit="bulk-duplicate" class="flex items-center gap-2">
+        <select name="domain_id" class="select select-xs w-56" aria-label="Duplicate to domain">
+          <option value="">Duplicate to…</option>
+          <option :for={domain <- @domains} value={domain.id}>{domain.hostname}</option>
+        </select>
+        <button type="submit" class="btn btn-xs" phx-disable-with="Duplicating…">
+          <.icon name="hero-document-duplicate" class="w-3.5 h-3.5" /> Duplicate
         </button>
       </form>
 

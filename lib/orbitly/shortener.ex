@@ -214,6 +214,41 @@ defmodule Orbitly.Shortener do
     end
   end
 
+  @doc """
+  Duplicates the given links onto another domain — the migration path off a
+  burned redirect domain onto a fresh one. Copies target, description, expiry
+  and password as they are and keeps the original owner; only the domain
+  changes, and every copy gets a fresh id and timestamps. Runs as a single
+  `insert_all` (SQLite has one writer — never loop per link) and flushes the
+  cache once. Slugs already present on the target domain are skipped (slugs are
+  unique per (domain, slug)); the click history is NOT copied. The ids run
+  through the actor's scope, so a tampered id list can only ever copy links the
+  actor may access. Unlike `reassign_links` this is open to any authenticated
+  caller: it reveals only domains, which every user already sees in the create
+  form's picker, never the account list (ADR-0006). Returns
+  `{:ok, duplicated_count, skipped_count}`.
+  """
+  def duplicate_links(ids, target_domain_id, actor) when is_list(ids) do
+    with false <- is_nil(actor),
+         {:ok, domain_id} <- existing_active_domain_id(target_domain_id) do
+      sources = duplicable_sources(actor, valid_uuids(ids))
+      existing = existing_slugs(domain_id)
+      now = DateTime.utc_now()
+
+      rows =
+        sources
+        |> Enum.reject(&MapSet.member?(existing, &1.slug))
+        |> Enum.map(&copy_row(&1, domain_id, now))
+
+      {count, _} = Repo.insert_all(Link, rows, on_conflict: :nothing)
+      RedirectCache.flush()
+      {:ok, count, length(sources) - count}
+    else
+      true -> {:error, :unauthorized}
+      :error -> {:error, :invalid_domain}
+    end
+  end
+
   ## -- Click events -------------------------------------------------------
 
   @doc "Click events visible to `actor`: for own links, or all for an admin."
@@ -283,6 +318,53 @@ defmodule Orbitly.Shortener do
   end
 
   defp existing_user_id(_id), do: :error
+
+  defp existing_active_domain_id(id) when is_binary(id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         true <- Repo.exists?(from(d in Domain, where: d.id == ^uuid and d.active == true)) do
+      {:ok, uuid}
+    else
+      _ -> :error
+    end
+  end
+
+  defp existing_active_domain_id(_id), do: :error
+
+  ## -- Duplication --------------------------------------------------------
+
+  # Scoped source rows to copy, as plain maps (only the columns that carry
+  # over). Scoping keeps a tampered id list on the actor's own links.
+  defp duplicable_sources(actor, uuids) do
+    actor
+    |> scope_links()
+    |> where([l], l.id in ^uuids)
+    |> select([l], %{
+      slug: l.slug,
+      target_url: l.target_url,
+      description: l.description,
+      expires_at: l.expires_at,
+      password_hash: l.password_hash,
+      owner_id: l.owner_id
+    })
+    |> Repo.all()
+  end
+
+  defp existing_slugs(domain_id) do
+    from(l in Link, where: l.domain_id == ^domain_id, select: l.slug)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  # A fresh row on the target domain: new id and timestamps, everything else
+  # carried over. `insert_all` autopopulates neither, so set both here.
+  defp copy_row(source, domain_id, now) do
+    Map.merge(source, %{
+      id: Ecto.UUID.generate(),
+      domain_id: domain_id,
+      inserted_at: now,
+      updated_at: now
+    })
+  end
 
   ## -- Owner attachment (Accounts is still Ash) ---------------------------
 

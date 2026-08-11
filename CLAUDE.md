@@ -56,13 +56,21 @@ docker compose run --rm app mix precommit   # before every commit
   paging all happen in `LinksLive.table_rows/1` — the one function the render
   path *and* the selection handlers use, so "select all on this page" can never
   drift from what is on screen.
-- **Bulk link actions** (`Shortener.delete_links/2`, `reassign_links/3`) run as
-  a single `delete_all` / `update_all` (SQLite has one writer — never loop per
-  link) and flush `RedirectCache` once. `delete_links` pushes the id list
+- **Bulk link actions** (`Shortener.delete_links/2`, `reassign_links/3`,
+  `duplicate_links/3`) run as a single `delete_all` / `update_all` /
+  `insert_all` (SQLite has one writer — never loop per link) and flush
+  `RedirectCache` once. `delete_links` and `duplicate_links` push the id list
   through `scope_links(actor)`, so tampered ids can never reach someone else's
   link; non-UUID ids are dropped before the query. Reassigning an owner is
   admin-only (a normal user must not see the account list, ADR-0006) and is the
   only path that ever changes `owner_id` — it stays out of every changeset.
+  `duplicate_links` copies the scoped links onto another (active) domain — the
+  migration path off a burned redirect domain — keeping owner, target, expiry
+  and password, giving each copy a fresh id/timestamps, skipping slugs already
+  present on the target (unique per domain) and never copying click history. It
+  is open to any authenticated caller (exposes only domains, which the create
+  form already shows — not the account list). Returns
+  `{:ok, duplicated, skipped}`.
 - **Auth is plain Phoenix session auth** (phx.gen.auth model, `OrbitlyWeb.UserAuth`):
   opaque session tokens in `users_tokens`, Bcrypt passwords, reset tokens stored
   SHA-256-hashed. `fetch_current_user` plug + `on_mount` hooks
@@ -88,7 +96,8 @@ docker compose run --rm app mix precommit   # before every commit
   multi-select in `LinksLive.Bulk`, column sorting in `LinksLive.Sort`) —
   event names and ids (`link-form`, `search-form`, `advanced-options`,
   `edit-form`, `link-<id>`, `bulk-bar`, `bulk-reassign-form`,
-  `toggle-select`, `toggle-select-page`, `bulk-delete`, `bulk-reassign`,
+  `bulk-duplicate-form`, `toggle-select`, `toggle-select-page`,
+  `bulk-delete`, `bulk-reassign`, `bulk-duplicate`,
   `scope`, `sort`) are the contract; a new design must render the row
   checkbox, the bulk bar and exactly one sort control (`Sort.sort_menu` for
   list designs *or* `Sort.sort_header` cells for a table — never both, the
