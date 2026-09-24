@@ -199,7 +199,10 @@ if config_env() == :prod do
            tls_options: [
              verify: :verify_peer,
              cacerts: :public_key.cacerts_get(),
-             server_name_indication: String.to_charlist(smtp_relay)
+             server_name_indication: String.to_charlist(smtp_relay),
+             # gen_smtp defaults to depth: 0 (only certs signed directly by a
+             # root CA), which rejects relays behind an intermediate CA.
+             depth: 5
            ]
          ] ++ smtp_credentials
 
