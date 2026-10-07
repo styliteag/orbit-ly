@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Alias domains: a domain can be an alias of another (e.g. `stylite.de` →
+  `stylite.io`); every link of the target resolves on both hosts. Set when
+  adding a domain on the admin domains page.
+- Per-user domain access: admins can restrict a user to selected domains
+  (default: all domains, including future ones). Existing links on a revoked
+  domain keep working and stay editable.
+- Per-user default domain, preselected for new links; set by the user in
+  Settings or by an admin on the users page.
+
+### Changed
+
+- Links can no longer be created on inactive domains through the context.
+
 ## [0.3.4] - 2026-09-24
 
 ## [0.3.3] - 2026-08-11

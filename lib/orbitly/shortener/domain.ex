@@ -10,6 +10,12 @@ defmodule Orbitly.Shortener.Domain do
   is the env-driven sentinel row managed by `Orbitly.Shortener.PrimaryDomain`,
   which sets the flag through `primary_changeset/2`. Admins can only create and
   edit plain redirect domains.
+
+  A domain can be an *alias* of another one (`alias_of_id`): it owns no links,
+  every slug of its target resolves on the alias host too. Aliases never chain
+  and the primary is never an alias. The checks that need the database (target
+  exists and is no alias, the domain has no links/aliases) live in
+  `Orbitly.Shortener`.
   """
 
   use Ecto.Schema
@@ -27,6 +33,8 @@ defmodule Orbitly.Shortener.Domain do
     field :is_primary, :boolean, default: false
     field :active, :boolean, default: true
 
+    belongs_to :alias_of, __MODULE__
+    has_many :aliases, __MODULE__, foreign_key: :alias_of_id
     has_many :links, Orbitly.Shortener.Link, foreign_key: :domain_id
 
     timestamps()
@@ -35,7 +43,8 @@ defmodule Orbitly.Shortener.Domain do
   @doc "Admin create: plain redirect domain, never primary."
   def create_changeset(domain, attrs) do
     domain
-    |> cast(attrs, [:hostname, :active])
+    |> cast(attrs, [:hostname, :active, :alias_of_id])
+    |> validate_alias()
     |> common_changeset()
   end
 
@@ -45,8 +54,9 @@ defmodule Orbitly.Shortener.Domain do
   """
   def update_changeset(domain, attrs) do
     domain
-    |> cast(attrs, [:hostname, :active])
+    |> cast(attrs, [:hostname, :active, :alias_of_id])
     |> protect_primary_active()
+    |> validate_alias()
     |> common_changeset()
   end
 
@@ -69,6 +79,7 @@ defmodule Orbitly.Shortener.Domain do
     # ecto_sqlite3 derives the constraint name from the column, not the index'
     # actual name (domains_unique_hostname_index).
     |> unique_constraint(:hostname, name: "domains_hostname_index")
+    |> foreign_key_constraint(:alias_of_id)
   end
 
   defp normalize_hostname(changeset) do
@@ -100,6 +111,25 @@ defmodule Orbitly.Shortener.Domain do
       add_error(changeset, :active, "the primary domain cannot be deactivated")
     else
       changeset
+    end
+  end
+
+  # Pure alias rules: never on the primary, never pointing at itself.
+  defp validate_alias(changeset) do
+    alias_of_id = get_field(changeset, :alias_of_id)
+
+    cond do
+      is_nil(alias_of_id) ->
+        changeset
+
+      changeset.data.is_primary ->
+        add_error(changeset, :alias_of_id, "the primary domain cannot be an alias")
+
+      alias_of_id == changeset.data.id ->
+        add_error(changeset, :alias_of_id, "a domain cannot be an alias of itself")
+
+      true ->
+        changeset
     end
   end
 end

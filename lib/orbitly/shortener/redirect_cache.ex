@@ -151,12 +151,19 @@ defmodule Orbitly.Shortener.RedirectCache do
     end
   end
 
+  # `h` is the requested host, `d` the domain owning the link: the host itself,
+  # or — when the host is an alias — its target. Both must be active. `limit: 1`
+  # keeps a stray link on an alias from raising MultipleResultsError.
   defp load_link(host, slug) do
     query =
       from(l in Link,
         join: d in Domain,
         on: d.id == l.domain_id,
-        where: l.slug == ^slug and d.hostname == ^host and d.active == true,
+        join: h in Domain,
+        on: h.id == d.id or h.alias_of_id == d.id,
+        where: l.slug == ^slug and h.hostname == ^host and h.active and d.active,
+        order_by: [desc: h.id == d.id],
+        limit: 1,
         select: %{
           link_id: l.id,
           target_url: l.target_url,

@@ -381,21 +381,15 @@ defmodule OrbitlyWeb.LinksLive do
 
   # --- data ---
 
+  # Only domains the user may put new links on (active, non-alias, granted),
+  # primary first; their own default domain is preselected.
   defp load_domains(socket) do
-    domains =
-      Shortener.list_domains()
-      |> Enum.filter(& &1.active)
-      |> Enum.sort_by(&{!&1.is_primary, &1.hostname})
-
-    default_domain_id =
-      case domains do
-        [first | _] -> first.id
-        [] -> nil
-      end
+    user = socket.assigns.current_user
+    domains = Shortener.usable_domains(user)
 
     socket
     |> assign(:domains, domains)
-    |> assign(:default_domain_id, default_domain_id)
+    |> assign(:default_domain_id, Shortener.default_domain_id(user, domains))
   end
 
   # Reassignment is admin-only, so only an admin ever gets the account list.

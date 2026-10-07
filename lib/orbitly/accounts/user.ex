@@ -19,6 +19,9 @@ defmodule Orbitly.Accounts.User do
     field :current_password, :string, virtual: true, redact: true
     field :confirmed_at, :utc_datetime_usec
     field :admin, :boolean, default: false
+    # Domain access (managed by Orbitly.Shortener.DomainAccess, never cast here)
+    field :all_domains, :boolean, default: true
+    field :default_domain_id, Ecto.UUID
   end
 
   @doc """

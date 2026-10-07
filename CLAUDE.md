@@ -53,6 +53,23 @@ docker compose run --rm app mix precommit   # before every commit
   changesets cast it, `duplicate_links` copies it, the create/edit forms carry
   a checkbox and `link_badges` shows a `hero-eye` icon. Reason for per-link (not
   a global env flag): only some customers' appliances block the auto-redirect.
+- **Alias domains** (`domains.alias_of_id`, self-FK, `nilify_all`): an alias
+  owns no links, `RedirectCache.load_link` joins the requested host to the
+  link's domain as itself *or* its alias target (both must be active). Rules:
+  `Domain.validate_alias` (not primary, not self) + `Shortener`
+  `validate_alias_target`/`validate_alias_source` (target exists and is no
+  alias; a domain with links or aliases can't become one). `create_link`
+  refuses alias domains, `duplicate_links` treats them as invalid targets,
+  `LinksLive` hides them from the pickers.
+- **Per-user domain access + default domain** (`Orbitly.Shortener.DomainAccess`,
+  delegated from the context): `users.all_domains` (default true) or the
+  `user_domains` grant list; admins never restricted. `usable_domains/1`
+  (active, non-alias, granted) feeds the link pickers; `create_link` and
+  `duplicate_links` enforce it server-side. `users.default_domain_id` is set by
+  the user (`/settings`) or an admin (`/admin/users`, `set_domain_access` with
+  `:default_domain_id`, one transaction); a stale default silently falls back.
+  Revocation never touches existing links. "Default domain" ≠ primary domain.
+  No user/domain groups yet (deliberate).
 - **Click events are NEVER written one by one**: only via `ClickBuffer`
   (batch `insert_all`), otherwise SQLite's single writer blocks the hot path.
   Stats are plain Ecto group-by queries (`ClickStats`, `Shortener.click_counts/1`).

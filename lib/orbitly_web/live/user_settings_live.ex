@@ -1,7 +1,7 @@
 defmodule OrbitlyWeb.UserSettingsLive do
   @moduledoc """
-  Self-service account settings: change password (requires the current
-  password). On success all of the user's tokens are dropped
+  Self-service account settings: default domain for new links (among the
+  user's usable domains) and change password (requires the current password). On success all of the user's tokens are dropped
   (log-out-everywhere), so the form is re-submitted to `POST /session`
   via phx-trigger-action to mint a fresh session with the new password.
   Design/mode switching lives in the navbar gear menu, not here.
@@ -12,6 +12,7 @@ defmodule OrbitlyWeb.UserSettingsLive do
   on_mount {OrbitlyWeb.UserAuth, :live_user_required}
 
   alias Orbitly.Accounts
+  alias Orbitly.Shortener
   alias Orbitly.Shortener.RateLimiter
 
   @impl true
@@ -24,10 +25,38 @@ defmodule OrbitlyWeb.UserSettingsLive do
      |> assign(:current_email, user.email)
      |> assign(:current_password, nil)
      |> assign(:trigger_submit, false)
-     |> assign(:password_form, to_form(Accounts.change_user_password(user), as: "user"))}
+     |> assign(:password_form, to_form(Accounts.change_user_password(user), as: "user"))
+     |> assign_default_domain(user)}
+  end
+
+  defp assign_default_domain(socket, user) do
+    domains = Shortener.usable_domains(user)
+
+    socket
+    |> assign(:domain_options, Enum.map(domains, &{&1.hostname, &1.id}))
+    |> assign(
+      :default_form,
+      to_form(%{"domain_id" => Shortener.default_domain_id(user, domains)}, as: "default")
+    )
   end
 
   @impl true
+  def handle_event("update_default_domain", %{"default" => %{"domain_id" => id}}, socket) do
+    user = socket.assigns.current_user
+
+    case Shortener.set_default_domain(user, id, user) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:current_user, user)
+         |> assign_default_domain(user)
+         |> put_flash(:info, "Default domain saved")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "That domain is not available to you")}
+    end
+  end
+
   def handle_event("validate_password", params, socket) do
     %{"current_password" => current_password, "user" => user_params} = params
 
@@ -82,6 +111,23 @@ defmodule OrbitlyWeb.UserSettingsLive do
           <h1 class="text-2xl font-bold">Settings</h1>
           <p class="text-sm opacity-60">{@current_email}</p>
         </header>
+
+        <section class="card bg-base-100 border border-base-200 shadow-sm">
+          <div class="card-body space-y-2">
+            <h2 class="card-title text-base">Default domain</h2>
+            <.form for={@default_form} id="default-domain-form" phx-submit="update_default_domain">
+              <.input
+                type="select"
+                field={@default_form[:domain_id]}
+                options={@domain_options}
+                label="Preselected for new links"
+              />
+              <.button class="btn btn-primary mt-2" phx-disable-with="Saving…">
+                Save default domain
+              </.button>
+            </.form>
+          </div>
+        </section>
 
         <section class="card bg-base-100 border border-base-200 shadow-sm">
           <div class="card-body space-y-2">

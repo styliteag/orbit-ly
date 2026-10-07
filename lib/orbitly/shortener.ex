@@ -13,7 +13,7 @@ defmodule Orbitly.Shortener do
   import Ecto.Query
 
   alias Orbitly.Repo
-  alias Orbitly.Shortener.{ClickEvent, Domain, Link, RedirectCache, Slug}
+  alias Orbitly.Shortener.{ClickEvent, Domain, DomainAccess, Link, RedirectCache, Slug}
 
   @slug_attempts 5
 
@@ -32,6 +32,7 @@ defmodule Orbitly.Shortener do
     if admin?(actor) do
       %Domain{}
       |> Domain.create_changeset(attrs)
+      |> validate_alias_target()
       |> Repo.insert()
       |> flush_on_ok()
     else
@@ -43,6 +44,8 @@ defmodule Orbitly.Shortener do
     if admin?(actor) do
       domain
       |> Domain.update_changeset(attrs)
+      |> validate_alias_target()
+      |> validate_alias_source()
       |> Repo.update()
       |> flush_on_ok()
     else
@@ -62,6 +65,51 @@ defmodule Orbitly.Shortener do
       true -> domain |> Repo.delete() |> flush_and_ok()
     end
   end
+
+  # The alias target must exist and must not be an alias itself (no chains).
+  defp validate_alias_target(changeset) do
+    target_id = Ecto.Changeset.get_change(changeset, :alias_of_id)
+
+    cond do
+      is_nil(target_id) ->
+        changeset
+
+      Repo.exists?(from(d in Domain, where: d.id == ^target_id and is_nil(d.alias_of_id))) ->
+        changeset
+
+      true ->
+        Ecto.Changeset.add_error(changeset, :alias_of_id, "must be an existing non-alias domain")
+    end
+  end
+
+  # An existing domain may only become an alias while it has no links (they
+  # would be shadowed) and no aliases of its own (they would chain).
+  defp validate_alias_source(changeset) do
+    id = changeset.data.id
+
+    cond do
+      is_nil(Ecto.Changeset.get_change(changeset, :alias_of_id)) ->
+        changeset
+
+      Repo.exists?(from(l in Link, where: l.domain_id == ^id)) ->
+        Ecto.Changeset.add_error(changeset, :alias_of_id, "domain still has links")
+
+      Repo.exists?(from(d in Domain, where: d.alias_of_id == ^id)) ->
+        Ecto.Changeset.add_error(changeset, :alias_of_id, "domain has aliases itself")
+
+      true ->
+        changeset
+    end
+  end
+
+  ## -- Domain access (see Orbitly.Shortener.DomainAccess) ----------------
+
+  defdelegate usable_domains(user), to: DomainAccess
+  defdelegate granted_domain_ids(user), to: DomainAccess
+  defdelegate grants_by_user, to: DomainAccess
+  defdelegate default_domain_id(user, domains), to: DomainAccess
+  defdelegate set_default_domain(user, domain_id, actor), to: DomainAccess
+  defdelegate set_domain_access(user, attrs, actor), to: DomainAccess
 
   ## -- Links --------------------------------------------------------------
 
@@ -123,6 +171,7 @@ defmodule Orbitly.Shortener do
 
             %Link{}
             |> Link.create_changeset(params)
+            |> refuse_unusable_domain(actor)
             |> Repo.insert()
             |> flush_on_ok()
 
@@ -230,7 +279,7 @@ defmodule Orbitly.Shortener do
   """
   def duplicate_links(ids, target_domain_id, actor) when is_list(ids) do
     with false <- is_nil(actor),
-         {:ok, domain_id} <- existing_active_domain_id(target_domain_id) do
+         {:ok, domain_id} <- usable_domain_id(target_domain_id, actor) do
       sources = duplicable_sources(actor, valid_uuids(ids))
       existing = existing_slugs(domain_id)
       now = DateTime.utc_now()
@@ -319,16 +368,23 @@ defmodule Orbitly.Shortener do
 
   defp existing_user_id(_id), do: :error
 
-  defp existing_active_domain_id(id) when is_binary(id) do
-    with {:ok, uuid} <- Ecto.UUID.cast(id),
-         true <- Repo.exists?(from(d in Domain, where: d.id == ^uuid and d.active == true)) do
-      {:ok, uuid}
-    else
-      _ -> :error
-    end
+  # Duplication target: an active, non-alias domain the actor may use.
+  defp usable_domain_id(id, actor) do
+    if DomainAccess.usable?(actor, id), do: Ecto.UUID.cast(id), else: :error
   end
 
-  defp existing_active_domain_id(_id), do: :error
+  # New links only go onto domains the actor may use: active, not an alias
+  # (aliases own no links — their slugs come from the target), and granted
+  # when the actor is restricted. A missing domain fails its own required check.
+  defp refuse_unusable_domain(changeset, actor) do
+    domain_id = Ecto.Changeset.get_field(changeset, :domain_id)
+
+    if is_nil(domain_id) or DomainAccess.usable?(actor, domain_id) do
+      changeset
+    else
+      Ecto.Changeset.add_error(changeset, :domain_id, "is not available to you")
+    end
+  end
 
   ## -- Duplication --------------------------------------------------------
 

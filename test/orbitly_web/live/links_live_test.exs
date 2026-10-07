@@ -8,6 +8,15 @@ defmodule OrbitlyWeb.LinksLiveTest do
     %{user: registered_user_fixture(), domain: domain_fixture(%{hostname: "go.example"})}
   end
 
+  test "alias domains are not offered for new links", %{conn: conn, user: user, domain: domain} do
+    alias_domain = domain_fixture(%{hostname: "alias.example", alias_of_id: domain.id})
+
+    {:ok, view, _html} = conn |> log_in(user) |> live(~p"/links")
+
+    assert has_element?(view, ~s{#link-form option[value="#{domain.id}"]})
+    refute has_element?(view, ~s{option[value="#{alias_domain.id}"]})
+  end
+
   test "redirects anonymous visitors to sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/links")
   end

@@ -8,6 +8,9 @@ Terms of the domain. Use exactly these in code and in conversations.
 | **Instance admin** | A user with the `admin` flag. Manages domains and users and has full access to all links (ADR-0006). |
 | **Tenant** | Functionally identical to a user. Isolation is row-based via `owner_id`. |
 | **Domain** | A concrete hostname created by the instance admin (e.g. `go.short.example`) under which short links are reachable. Shared by all users (ADR-0003). |
+| **Alias domain** | A domain pointing at another (`alias_of_id`), e.g. `stylite.de` → `stylite.io`. Owns no links itself; every link of the target is reachable on both hosts. Short URLs in the UI always show the target host. |
+| **Default domain** | Per-user: the domain preselected when the user creates a link. Not to be confused with the *primary domain*. |
+| **Domain access** | Which domains a user may put new links on: all (default) or an admin-granted list. Admins always have all. |
 | **Primary domain** | The domain marked as primary (sentinel row). Only there does the dashboard (UI) run; all other domains are pure redirect hosts (ADR-0004). Its hostname comes from `MAIN_DOMAIN` and is synced at boot — changing it moves the dashboard and the links living on it to the new domain. |
 | **Wildcard domain** | Pure infrastructure detail: the reverse proxy forwards `*.short.example` wholesale to the app and terminates TLS with a wildcard certificate. In the domain, only concrete domains exist. |
 | **Link** | The central entity: belongs to exactly one user, hangs off exactly one domain, maps a slug to a target URL. Optional: expiry date, password protection. |

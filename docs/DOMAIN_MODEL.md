@@ -8,17 +8,23 @@ Result of the grilling session on 2026-07-09. Terms: see [GLOSSARY.md](GLOSSARY.
 erDiagram
     USER ||--o{ LINK : owns
     DOMAIN ||--o{ LINK : "hosts"
+    DOMAIN |o--o{ DOMAIN : "aliased by"
+    USER }o--o{ DOMAIN : "granted (user_domains)"
+    USER }o--o| DOMAIN : "default domain"
     LINK ||--o{ CLICK_EVENT : "produces"
 
     USER {
         string email UK
         string password_hash
         boolean admin
+        boolean all_domains "default true"
+        uuid default_domain_id "optional"
     }
     DOMAIN {
         string hostname UK "concrete, no wildcard"
         boolean is_primary "exactly one"
         boolean active
+        uuid alias_of_id "optional, target domain"
     }
     LINK {
         string slug "unique per (domain, slug)"
@@ -46,6 +52,17 @@ erDiagram
 6. Expired link (`expires_at < now`): the redirect responds 410, the link stays visible to its owner.
 7. Unknown host or unknown slug: 404.
 8. Click events older than 12 months are deleted daily.
+9. An alias domain (`alias_of_id` set) owns no links; every slug of its target
+   resolves on the alias host too. No chains (the target is never an alias),
+   the primary is never an alias, a domain with links or aliases cannot become
+   one. Deleting the target leaves the alias as a plain, empty domain.
+10. Domain access: a user with `all_domains` (default) may put new links on
+    every active non-alias domain; with it off, only on the domains granted in
+    `user_domains`. Admins are never restricted. Revoking a domain keeps the
+    user's existing links working and editable.
+11. A user's default domain (set by the user or an admin) must be usable when
+    set; a default that later becomes unusable falls back to the first usable
+    domain (primary first).
 
 ## Flows
 
@@ -54,7 +71,9 @@ erDiagram
 1. Request hits the app (proxy has terminated TLS, `x-forwarded-*` set).
 2. Plug in the endpoint: check host against the domain list (cache) → unknown: 404.
 3. Primary domain + UI route/reserved slug → pass through to the router.
-4. Look up `(host, slug)` in the ETS cache (miss: DB, then cache).
+4. Look up `(host, slug)` in the ETS cache (miss: DB, then cache). On an alias
+   host the slug is looked up on the target domain; alias and target must both
+   be active.
 5. Expired → 410. Password-protected → interstitial with a password form.
 6. Otherwise: 302 redirect to the target URL; click event into a buffer (batch insert, asynchronous).
 

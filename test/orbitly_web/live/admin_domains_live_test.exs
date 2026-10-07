@@ -39,4 +39,30 @@ defmodule OrbitlyWeb.AdminDomainsLiveTest do
     refute has_element?(view, ~s{#domain-#{primary.id} [phx-click="delete"]})
     refute has_element?(view, ~s{#domain-#{primary.id} [phx-click="toggle-active"]})
   end
+
+  test "admin adds an alias of another domain, shown with its target", %{conn: conn} do
+    admin = registered_admin_fixture()
+    target = domain_fixture(%{hostname: "stylite.io"})
+
+    {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/admin/domains")
+
+    view
+    |> form("#domain-form", %{"form" => %{"hostname" => "stylite.de", "alias_of_id" => target.id}})
+    |> render_submit()
+
+    alias_domain = Enum.find(Orbitly.Shortener.list_domains(), &(&1.hostname == "stylite.de"))
+    assert alias_domain.alias_of_id == target.id
+    assert view |> element("#domain-#{alias_domain.id}") |> render() =~ "alias of stylite.io"
+  end
+
+  test "the alias picker offers only non-alias domains", %{conn: conn} do
+    admin = registered_admin_fixture()
+    target = domain_fixture(%{hostname: "stylite.io"})
+    domain_fixture(%{hostname: "stylite.de", alias_of_id: target.id})
+
+    {:ok, view, _html} = conn |> log_in(admin) |> live(~p"/admin/domains")
+
+    assert has_element?(view, ~s{#domain-form select option[value="#{target.id}"]})
+    refute view |> element("#domain-form select") |> render() =~ "stylite.de"
+  end
 end

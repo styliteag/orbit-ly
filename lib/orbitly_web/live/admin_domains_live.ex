@@ -1,7 +1,7 @@
 defmodule OrbitlyWeb.AdminDomainsLive do
   @moduledoc """
-  Instance-admin domain management (ADR-0003): add redirect hostnames, toggle
-  active, delete. The primary domain follows MAIN_DOMAIN (env, synced on boot)
+  Instance-admin domain management (ADR-0003): add redirect hostnames (or
+  aliases of an existing domain), toggle active, delete. The primary domain follows MAIN_DOMAIN (env, synced on boot)
   and is shown read-only — it cannot be deactivated or deleted here.
   """
 
@@ -69,6 +69,18 @@ defmodule OrbitlyWeb.AdminDomainsLive do
 
   defp find(socket, id), do: Enum.find(socket.assigns.domains, &(&1.id == id))
 
+  # Aliases never chain: only plain domains can be an alias target.
+  defp alias_targets(domains) do
+    for d <- domains, is_nil(d.alias_of_id), do: {d.hostname, d.id}
+  end
+
+  defp hostname_of(domains, id) do
+    case Enum.find(domains, &(&1.id == id)) do
+      %Domain{hostname: hostname} -> hostname
+      nil -> "?"
+    end
+  end
+
   defp load_domains(socket) do
     domains = Shortener.list_domains()
     assign(socket, :domains, Enum.sort_by(domains, & &1.hostname))
@@ -94,6 +106,15 @@ defmodule OrbitlyWeb.AdminDomainsLive do
             <div class="flex-1 w-full">
               <.input field={@form[:hostname]} placeholder="go.example.com" class="input w-full" />
             </div>
+            <div class="w-full sm:w-64">
+              <.input
+                type="select"
+                field={@form[:alias_of_id]}
+                prompt="Own links (no alias)"
+                options={alias_targets(@domains)}
+                class="select w-full"
+              />
+            </div>
             <.button phx-disable-with="Saving…" class="btn btn-primary">
               <.icon name="hero-plus" class="w-4 h-4" /> Add domain
             </.button>
@@ -117,6 +138,13 @@ defmodule OrbitlyWeb.AdminDomainsLive do
                   primary
                 </span>
                 <span :if={!domain.active} class="badge badge-warning badge-sm">inactive</span>
+                <span
+                  :if={domain.alias_of_id}
+                  class="badge badge-ghost badge-sm"
+                  title="Serves every link of its target"
+                >
+                  alias of {hostname_of(@domains, domain.alias_of_id)}
+                </span>
               </div>
 
               <div :if={!domain.is_primary} class="flex items-center gap-2 shrink-0">
