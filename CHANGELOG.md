@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Docker image: create `/data` owned by `nobody`, so a fresh named volume
+  (`compose.prod.yml`) is writable and the first start no longer fails with
+  `database_open_failed`.
+
 ## [0.4.0] - 2026-10-07
 
 ### Added
