@@ -111,6 +111,12 @@ ENV LC_ALL=C.UTF-8
 WORKDIR "/app"
 RUN chown nobody /app
 
+# The SQLite volume is mounted at /data (DATABASE_PATH in compose.prod.yml).
+# Docker seeds a fresh named volume from the image directory, including its
+# owner; without this the volume is root-owned and the release (running as
+# nobody) fails at boot with Exqlite database_open_failed.
+RUN mkdir /data && chown nobody /data
+
 # set runner ENV
 ENV MIX_ENV="prod"
 
